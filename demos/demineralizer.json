@@ -1,0 +1,119 @@
+{
+  "format": "radshield-scene",
+  "version": 1,
+  "volumes": [
+    {
+      "type": "box",
+      "id": "concrete",
+      "role": "shield",
+      "materialKey": "concrete",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "priority": 10,
+      "label": "Concrete Shield (6ft cube)",
+      "visible": true,
+      "enabled": true,
+      "dimensions": {
+        "width": 182.88,
+        "depth": 182.88,
+        "height": 182.88
+      }
+    },
+    {
+      "type": "box",
+      "id": "cavity",
+      "role": "shield",
+      "materialKey": "air",
+      "position": {
+        "x": 0,
+        "y": 30.48,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "priority": 20,
+      "label": "Cavity (3ft x 3ft x 5ft)",
+      "visible": true,
+      "enabled": true,
+      "dimensions": {
+        "width": 91.44,
+        "depth": 91.44,
+        "height": 152.4
+      }
+    },
+    {
+      "type": "cylinder",
+      "id": "demin",
+      "role": "source",
+      "materialKey": "water",
+      "position": {
+        "x": 0,
+        "y": 30.48,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "priority": 30,
+      "label": "Demineralizer (24in dia)",
+      "visible": true,
+      "enabled": true,
+      "isotopeKey": "Co-60",
+      "activity_Ci": 1.892705892,
+      "dimensions": {
+        "radius": 30.48,
+        "height": 121.92
+      }
+    }
+  ],
+  "dosePoints": [
+    {
+      "name": "Side wall (contact)",
+      "x": 101.6,
+      "y": 91.44,
+      "z": 0
+    },
+    {
+      "name": "3 ft from wall",
+      "x": 182.88,
+      "y": 91.44,
+      "z": 0
+    },
+    {
+      "name": "1 ft above opening",
+      "x": 0,
+      "y": 213.36,
+      "z": 0
+    }
+  ],
+  "isodoseLevels": [
+    {
+      "value": 100,
+      "color": "#ef4444",
+      "label": "100 mrem/hr"
+    },
+    {
+      "value": 20,
+      "color": "#f59e0b",
+      "label": "20 mrem/hr"
+    },
+    {
+      "value": 2,
+      "color": "#22c55e",
+      "label": "2 mrem/hr"
+    }
+  ]
+}
