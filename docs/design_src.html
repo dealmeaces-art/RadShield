@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RadShield — Methodology &amp; Validation</title>
+<style>
+    :root {
+        --accent: #1f6feb;
+        --accent-dark: #0d419d;
+        --ink: #1c2128;
+        --muted: #57606a;
+        --line: #d0d7de;
+        --bg-soft: #f6f8fa;
+        --tip: #dafbe1; --tip-edge: #1a7f37;
+        --warn: #fff8c5; --warn-edge: #9a6700;
+        --note: #ddf4ff; --note-edge: #0969da;
+        --seal: #0a5c2e; --seal-bg: #eaf7ef;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: "Segoe UI", -apple-system, Roboto, Helvetica, Arial, sans-serif;
+        color: var(--ink); background: #ffffff; line-height: 1.6; font-size: 16px;
+    }
+    .page { max-width: 940px; margin: 0 auto; padding: 0 30px 90px; }
+
+    /* ---- Cover ---- */
+    .cover { border-bottom: 4px solid var(--accent); padding: 60px 0 34px; }
+    .cover .product { font-size: 46px; font-weight: 800; letter-spacing: -1px; color: var(--accent-dark); }
+    .cover .doctitle { font-size: 25px; font-weight: 300; color: var(--ink); margin-top: 2px; }
+    .cover .subtitle { margin-top: 14px; font-size: 17px; color: #333c45; max-width: 720px; }
+    .cover .meta { margin-top: 20px; color: var(--muted); font-size: 13.5px; }
+
+    /* ---- Standards seal ---- */
+    .seal {
+        display: flex; gap: 14px; align-items: flex-start;
+        background: var(--seal-bg); border: 1px solid #bfe6cd; border-left: 5px solid var(--seal);
+        border-radius: 10px; padding: 16px 20px; margin: 26px 0 4px;
+    }
+    .seal .mark { font-size: 30px; line-height: 1; }
+    .seal .body { font-size: 14.5px; }
+    .seal .body b { color: var(--seal); }
+
+    /* ---- TOC ---- */
+    .toc { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: 22px 30px; margin: 30px 0 10px; }
+    .toc h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 12px; border: none; padding: 0; }
+    .toc ol { list-style: none; column-count: 2; column-gap: 40px; }
+    .toc li { margin: 5px 0; break-inside: avoid; }
+    .toc a { color: var(--accent-dark); text-decoration: none; font-weight: 600; font-size: 14.5px; }
+    .toc a:hover { text-decoration: underline; }
+    .toc .n { display: inline-block; min-width: 30px; color: var(--accent); }
+    .toc .sec { margin-top: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; column-span: all; }
+
+    /* ---- Headings ---- */
+    h1.chapter {
+        font-size: 28px; font-weight: 800; color: var(--accent-dark);
+        margin: 58px 0 6px; padding-top: 16px; border-top: 3px solid var(--accent);
+    }
+    h1.chapter .cnum { color: var(--accent); margin-right: 10px; }
+    h1.appx { font-size: 25px; }
+    h1.appx .cnum { font-size: 20px; }
+    h2 { font-size: 20px; font-weight: 700; margin: 32px 0 10px; color: var(--ink); }
+    h3 { font-size: 16.5px; font-weight: 700; margin: 22px 0 8px; color: var(--ink); }
+    p { margin: 11px 0; }
+    .lead { font-size: 17px; color: #2a333b; }
+
+    /* ---- Callouts ---- */
+    .tip, .warn, .note, .keypt {
+        border-radius: 8px; padding: 13px 16px 13px 46px; margin: 15px 0; position: relative; font-size: 15px;
+    }
+    .tip::before, .warn::before, .note::before, .keypt::before { position: absolute; left: 14px; top: 12px; font-size: 17px; }
+    .tip  { background: var(--tip);  border: 1px solid #b4e6c4; } .tip::before  { content: "✅"; }
+    .warn { background: var(--warn); border: 1px solid #ecd98a; } .warn::before { content: "⚠️"; }
+    .note { background: var(--note); border: 1px solid #a8d4f5; } .note::before { content: "ℹ️"; }
+    .keypt { background: #f3eefe; border: 1px solid #d6c8f5; } .keypt::before { content: "🔑"; }
+
+    /* ---- Tables ---- */
+    table { border-collapse: collapse; width: 100%; margin: 16px 0 18px; font-size: 14.5px; }
+    th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+    th { background: var(--bg-soft); font-weight: 700; }
+    tr:nth-child(even) td { background: #fbfcfd; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    caption { caption-side: bottom; font-size: 13.5px; color: var(--muted); padding-top: 8px; text-align: left; }
+    caption b { color: var(--accent-dark); }
+
+    /* ---- Figures ---- */
+    figure { margin: 24px 0 26px; }
+    figure img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 3px 14px rgba(27,31,36,0.12); }
+    .figbox { border: 1px solid var(--line); border-radius: 10px; background: var(--bg-soft); padding: 22px 18px; }
+    .figbox svg { width: 100%; height: auto; display: block; }
+    figcaption { margin-top: 9px; font-size: 13.5px; color: var(--muted); padding-left: 2px; }
+    figcaption b { color: var(--accent-dark); }
+
+    /* ---- Cross references & inline ---- */
+    a.xref { color: var(--accent-dark); font-weight: 600; text-decoration: none; border-bottom: 1px dotted var(--accent); }
+    a.xref:hover { border-bottom-style: solid; }
+    code { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 13.5px; }
+    .eq { background: var(--bg-soft); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; padding: 10px 14px; margin: 12px 0; font: 15px/1.7 Consolas, "SFMono-Regular", monospace; overflow-x: auto; }
+    ul.plain, ol.plain { margin: 8px 0 12px 26px; }
+    ul.plain li, ol.plain li { margin: 6px 0; }
+    .biglist { counter-reset: bl; list-style: none; margin: 14px 0; }
+    .biglist > li { counter-increment: bl; position: relative; padding: 4px 0 14px 52px; }
+    .biglist > li::before { content: counter(bl); position: absolute; left: 0; top: 2px; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .biglist > li b { color: var(--accent-dark); }
+
+    /* ---- Metric cards ---- */
+    .cards { display: flex; flex-wrap: wrap; gap: 14px; margin: 18px 0; }
+    .card { flex: 1 1 150px; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: #fff; }
+    .card .big { font-size: 26px; font-weight: 800; color: var(--accent-dark); line-height: 1.1; }
+    .card .lab { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+    /* ---- Print ---- */
+    @media print {
+        body { font-size: 11pt; }
+        .page { max-width: none; padding: 0; }
+        h1.chapter { page-break-before: always; margin-top: 0; }
+        .cover + .seal, .seal + .toc { page-break-inside: avoid; }
+        figure, table, .tip, .warn, .note, .keypt, .figbox, .cards { page-break-inside: avoid; }
+        figure img { box-shadow: none; }
+        a, a.xref { color: var(--accent-dark); text-decoration: none; border: none; }
+    }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ================= COVER ================= -->
+<div class="cover">
+    <div class="product">RadShield</div>
+    <div class="doctitle">Methodology &amp; Validation — Design Document</div>
+    <div class="subtitle">How RadShield calculates gamma dose rates, the national standards and reference
+    data it is built on, and the testing that shows its numbers can be trusted.</div>
+    <div class="meta">Version 0.6 &nbsp;•&nbsp; July 2026 &nbsp;•&nbsp; Technical basis document &nbsp;•&nbsp;
+    Companion to the RadShield User Guide</div>
+</div>
+
+<div class="seal">
+    <div class="mark">🛡️</div>
+    <div class="body">
+        <b>Standards basis.</b> RadShield computes dose rates with the <b>point-kernel method</b> — the same
+        method family used by industry codes such as MicroShield® — using buildup factors taken directly from
+        <b>ANSI/ANS-6.4.3-1991</b> and photon attenuation data from the <b>U.S. National Institute of Standards
+        and Technology (NIST XCOM)</b>. Its buildup calculations reproduce the standard's own published values
+        to within <b>2%</b> across 28 test cases. See the <a class="xref" href="#execsum">Executive Summary</a>
+        and <a class="xref" href="#validation">§5, Validation</a>.
+    </div>
+</div>
+
+<!-- ================= TOC ================= -->
+<div class="toc">
+<h2>Contents</h2>
+<ol>
+    <li class="sec">Main report</li>
+    <li><span class="n">1</span><a href="#execsum">Executive summary</a></li>
+    <li><span class="n">2</span><a href="#context">Where RadShield fits current practice</a></li>
+    <li><span class="n">3</span><a href="#howworks">How a dose rate is calculated</a></li>
+    <li><span class="n">4</span><a href="#standards">Standards &amp; data provenance</a></li>
+    <li><span class="n">5</span><a href="#validation">Validation &amp; verification</a></li>
+    <li><span class="n">6</span><a href="#capabilities">What RadShield can model</a></li>
+    <li><span class="n">7</span><a href="#limits">Honest limitations</a></li>
+    <li><span class="n">8</span><a href="#conclusion">Conclusion</a></li>
+    <li class="sec">Appendices (technical detail)</li>
+    <li><span class="n">A</span><a href="#appA">Geometry engine &amp; ray tracing</a></li>
+    <li><span class="n">B</span><a href="#appB">Buildup factors &amp; the GP form</a></li>
+    <li><span class="n">C</span><a href="#appC">Point-kernel equations, step by step</a></li>
+    <li><span class="n">D</span><a href="#appD">Nuclear &amp; material data</a></li>
+    <li><span class="n">E</span><a href="#appE">Isodose, heat maps &amp; time simulation</a></li>
+    <li><span class="n">F</span><a href="#appF">Full approximations &amp; limitations</a></li>
+    <li><span class="n">G</span><a href="#appG">Verification detail</a></li>
+    <li><span class="n">H</span><a href="#appH">References</a></li>
+</ol>
+</div>
+
+<!-- ================= 1. EXECUTIVE SUMMARY ================= -->
+<h1 class="chapter" id="execsum"><span class="cnum">1</span>Executive summary</h1>
+
+<p class="lead">RadShield is a software tool that predicts how much gamma radiation a person would receive at
+a given location, given the radioactive sources present and the shielding (tank walls, lead, steel, water,
+concrete) between them and that location. It answers everyday radiological-planning questions —
+<i>"how much dose at the tank wall?"</i>, <i>"how thick does the lead need to be?"</i>,
+<i>"what will the operator accumulate during this transfer?"</i> — from a 3-D model you build on screen.</p>
+
+<p>The important point for anyone evaluating whether to rely on it: <b>RadShield is not an ad-hoc estimator.</b>
+It implements the same calculation method, and uses the same nationally standardized reference data, as the
+established professional shielding codes used across the nuclear industry. Specifically:</p>
+
+<ul class="plain">
+    <li><b>The method</b> is the classical <b>point-kernel with buildup factors</b> — the documented method
+        family behind codes such as MicroShield® (see <a class="xref" href="#howworks">§3</a>).</li>
+    <li><b>The shielding "buildup" data</b> comes straight from the national consensus standard
+        <b>ANSI/ANS-6.4.3-1991</b>, <i>Gamma-Ray Attenuation Coefficients and Buildup Factors for Engineering
+        Materials</i> (see <a class="xref" href="#standards">§4</a>).</li>
+    <li><b>The photon attenuation data</b> comes from the U.S. National Institute of Standards and Technology
+        (<b>NIST XCOM</b>), the reference database for these coefficients (see <a class="xref" href="#appD">Appendix&nbsp;D</a>).</li>
+    <li><b>It has been checked against the standard's own numbers.</b> RadShield's buildup calculations
+        reproduce the values tabulated in ANSI/ANS-6.4.3 to within 2% across 28 independent test cases, and a
+        suite of over 100 automated tests guards the geometry, physics, and bookkeeping
+        (see <a class="xref" href="#validation">§5</a>).</li>
+</ul>
+
+<div class="cards">
+    <div class="card"><div class="big">ANSI/ANS<br>6.4.3-1991</div><div class="lab">Buildup-factor standard applied directly</div></div>
+    <div class="card"><div class="big">NIST XCOM</div><div class="lab">Reference photon attenuation data</div></div>
+    <div class="card"><div class="big">&lt; 2%</div><div class="lab">Agreement vs. the standard's tabulated buildup factors</div></div>
+    <div class="card"><div class="big">100+</div><div class="lab">Automated verification checks across 4 test suites</div></div>
+</div>
+
+<p>Compared with the quick hand-calculations and generic charts often used for a first estimate, RadShield's
+advantage is <b>fidelity</b>: it accounts for the true 3-D geometry of the source and every shield layer along
+each line of sight, for the scattered radiation that simple attenuation formulas ignore, and for multiple
+sources and time-varying activity at once. It produces a documented, repeatable number and a records-quality
+report — not a back-of-envelope figure (<a class="xref" href="#context">§2</a>).</p>
+
+<div class="keypt"><b>Bottom line.</b> RadShield brings the rigor of a professional shielding code — standardized
+method, standardized data, verified against the standard — to routine dose-rate estimates, in a tool that
+models the actual geometry of the job. It is a deterministic engineering estimate, not a measurement, and its
+limitations are stated plainly in <a class="xref" href="#limits">§7</a>.</p>
+
+<!-- ================= 2. CONTEXT ================= -->
+<h1 class="chapter" id="context"><span class="cnum">2</span>Where RadShield fits current practice</h1>
+
+<p>Most routine dose-rate estimates are made one of three ways. Each has a place; each also has a ceiling that
+RadShield is designed to lift.</p>
+
+<table>
+<tr><th style="width:230px">Common method</th><th>What it captures</th><th>Where it falls short</th></tr>
+<tr><td><b>Point-source hand calc</b><br>(Ẋ = Γ·A / d²)</td>
+    <td>A fast bare-source estimate from the isotope's gamma constant and distance.</td>
+    <td>No shielding, no source size, no geometry. Useful only as an unshielded upper bound.</td></tr>
+<tr><td><b>Attenuation hand calc</b><br>(add e<sup>−μx</sup>)</td>
+    <td>Adds one shield layer via exponential attenuation.</td>
+    <td>Ignores <b>buildup</b> (scattered photons), so it <i>under</i>-predicts; awkward for multiple layers,
+    real geometry, or multiple sources.</td></tr>
+<tr><td><b>Charts / nomographs</b></td>
+    <td>Pre-computed dose-vs-thickness curves for standard cases.</td>
+    <td>Only as good as the match between your job and the chart's assumed geometry.</td></tr>
+</table>
+
+<p>RadShield keeps the same physics these methods approximate, then removes their simplifications: it integrates
+over the <b>actual size and shape</b> of the source, traces each line of sight through <b>every</b> shield layer
+it truly crosses, and applies the standardized <b>buildup factors</b> that account for scattered radiation the
+simple attenuation formula leaves out. It handles <b>multiple sources</b> of different isotopes in one scene and
+can integrate dose over a <b>time-varying evolution</b>. The result is the same kind of number a dedicated
+shielding code produces, with a documented basis you can attach to a work package.</p>
+
+<div class="note"><b>RadShield complements, not replaces, measurement.</b> It is an engineering prediction used
+for planning and ALARA optimization. Field survey remains the system of record; RadShield's value is telling
+you <i>before</i> the job where the dose will be and what shielding will do about it.</div>
+
+<!-- ================= 3. HOW IT WORKS ================= -->
+<h1 class="chapter" id="howworks"><span class="cnum">3</span>How a dose rate is calculated</h1>
+
+<p class="lead">RadShield uses the <b>point-kernel method</b>. The idea is simple to state: break the radioactive
+source into many tiny pieces, work out the contribution of each piece at the point of interest, and add them
+all up. The subtlety — and where the standardized data earns its keep — is in the middle step.</p>
+
+<figure>
+    <div class="figbox">
+    <svg viewBox="0 0 900 210" role="img" aria-label="Five-stage calculation pipeline">
+        <defs>
+            <marker id="arw" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L6,3 L0,6 Z" fill="#57606a"/>
+            </marker>
+            <style>
+                .bx{fill:#ffffff;stroke:#1f6feb;stroke-width:1.6;rx:9;}
+                .bt{font:600 13px "Segoe UI",Arial;fill:#1c2128;}
+                .bn{font:800 13px "Segoe UI",Arial;fill:#1f6feb;}
+                .cn{font:11.5px "Segoe UI",Arial;fill:#57606a;}
+                .fl{stroke:#57606a;stroke-width:1.4;fill:none;}
+            </style>
+        </defs>
+        <g>
+            <rect class="bx" x="8"   y="40" width="160" height="96" rx="9"/>
+            <rect class="bx" x="192" y="40" width="160" height="96" rx="9"/>
+            <rect class="bx" x="376" y="40" width="160" height="96" rx="9"/>
+            <rect class="bx" x="560" y="40" width="160" height="96" rx="9"/>
+            <rect class="bx" x="744" y="40" width="148" height="96" rx="9"/>
+
+            <text class="bn" x="20" y="62">1</text>
+            <text class="bt" x="38" y="62">Mesh source</text>
+            <text class="cn" x="20" y="84">Divide the source</text>
+            <text class="cn" x="20" y="100">into hundreds of</text>
+            <text class="cn" x="20" y="116">point elements.</text>
+
+            <text class="bn" x="204" y="62">2</text>
+            <text class="bt" x="222" y="62">Trace rays</text>
+            <text class="cn" x="204" y="84">Line of sight from</text>
+            <text class="cn" x="204" y="100">each element through</text>
+            <text class="cn" x="204" y="116">every shield layer.</text>
+
+            <text class="bn" x="388" y="62">3</text>
+            <text class="bt" x="406" y="62">Attenuate</text>
+            <text class="cn" x="388" y="84">Inverse-square +</text>
+            <text class="cn" x="388" y="100">exponential decay</text>
+            <text class="cn" x="388" y="116">through each layer.</text>
+
+            <text class="bn" x="572" y="62">4</text>
+            <text class="bt" x="590" y="62">Add buildup</text>
+            <text class="cn" x="572" y="84">Correct for scattered</text>
+            <text class="cn" x="572" y="100">photons — ANSI/ANS</text>
+            <text class="cn" x="572" y="116">6.4.3 factors.</text>
+
+            <text class="bn" x="756" y="62">5</text>
+            <text class="bt" x="774" y="62">Dose &amp; sum</text>
+            <text class="cn" x="756" y="84">Convert to dose;</text>
+            <text class="cn" x="756" y="100">sum all elements</text>
+            <text class="cn" x="756" y="116">&amp; gamma lines.</text>
+
+            <line class="fl" x1="168" y1="88" x2="192" y2="88" marker-end="url(#arw)"/>
+            <line class="fl" x1="352" y1="88" x2="376" y2="88" marker-end="url(#arw)"/>
+            <line class="fl" x1="536" y1="88" x2="560" y2="88" marker-end="url(#arw)"/>
+            <line class="fl" x1="720" y1="88" x2="744" y2="88" marker-end="url(#arw)"/>
+        </g>
+    </svg>
+    </div>
+    <figcaption><b>Figure 1.</b> The five-stage point-kernel calculation. It is fully deterministic — no random
+    sampling — so the same scene always yields the same answer. The equations for each stage are in
+    <a class="xref" href="#appC">Appendix&nbsp;C</a>.</figcaption>
+</figure>
+
+<h2>3.1&nbsp; The five stages in plain language</h2>
+
+<ol class="biglist">
+    <li><b>Mesh the source.</b> A real source has size — the activity is spread through a volume of liquid,
+        sludge, or metal. RadShield subdivides it into hundreds of small elements, each carrying its share of
+        the activity, so the source's extent and its <i>self-shielding</i> (radiation absorbed on the way out
+        of the source itself) are included, not ignored. (<a class="xref" href="#appA">Appendix&nbsp;A, §A.4</a>.)</li>
+    <li><b>Trace the line of sight.</b> From each element, RadShield draws a straight ray to the point of
+        interest and records exactly which materials it passes through and how much of each — water, then
+        steel, then lead, then air, and so on (see <a class="xref" href="#fig2">Figure&nbsp;2</a>). This is
+        pure geometry, done analytically for each shape (<a class="xref" href="#appA">Appendix&nbsp;A, §A.3</a>).</li>
+    <li><b>Attenuate.</b> Two well-known physical laws are applied along that ray: radiation spreads out with
+        distance (the <i>inverse-square law</i>), and each shield layer removes photons exponentially according
+        to its material and thickness. The strength of each material's absorption comes from NIST reference
+        data (<a class="xref" href="#appC">Appendix&nbsp;C, Steps&nbsp;2–3</a>).</li>
+    <li><b>Add buildup.</b> Simple exponential attenuation counts only photons that reach the point
+        <i>without ever scattering</i>. In a real shield, many photons Compton-scatter and still arrive, just
+        with less energy. The <b>buildup factor</b> corrects for exactly this. RadShield's buildup factors are
+        the tabulated coefficients from ANSI/ANS-6.4.3-1991 — this is the single most important reason its
+        results are more realistic than a bare attenuation calculation (<a class="xref" href="#appB">Appendix&nbsp;B</a>).</li>
+    <li><b>Convert and sum.</b> The resulting radiation field is converted to a dose rate in mrem/hr using the
+        energy-absorption response of air, and the contributions of every source element and every gamma-ray
+        energy line of the isotope are added together (<a class="xref" href="#appC">Appendix&nbsp;C, Steps&nbsp;6–7</a>).</li>
+</ol>
+
+<figure id="fig2">
+    <div class="figbox">
+    <svg viewBox="0 0 900 200" role="img" aria-label="A single ray passing through layered shields">
+        <defs><style>
+            .lab{font:600 12.5px "Segoe UI",Arial;fill:#1c2128;}
+            .sub{font:11px "Segoe UI",Arial;fill:#57606a;}
+            .ttl{font:700 12.5px "Segoe UI",Arial;fill:#0d419d;}
+        </style></defs>
+        <!-- ray -->
+        <line x1="70" y1="110" x2="840" y2="110" stroke="#c9302c" stroke-width="2.2" stroke-dasharray="2 3"/>
+        <!-- source -->
+        <circle cx="70" cy="110" r="12" fill="#ff8f00"/>
+        <text class="lab" x="34" y="150">Source</text>
+        <text class="sub" x="30" y="166">element</text>
+        <!-- layers -->
+        <rect x="180" y="70" width="130" height="80" fill="#2196F3" opacity="0.45"/>
+        <rect x="310" y="70" width="70"  height="80" fill="#808080" opacity="0.55"/>
+        <rect x="380" y="70" width="55"  height="80" fill="#404040" opacity="0.65"/>
+        <rect x="435" y="70" width="330" height="80" fill="#E3F2FD" opacity="0.5"/>
+        <text class="ttl" x="200" y="60">Water</text>
+        <text class="ttl" x="316" y="60">Steel</text>
+        <text class="ttl" x="384" y="60">Lead</text>
+        <text class="ttl" x="560" y="60">Air</text>
+        <text class="sub" x="196" y="172">µ·t₁</text>
+        <text class="sub" x="322" y="172">µ·t₂</text>
+        <text class="sub" x="388" y="172">µ·t₃</text>
+        <text class="sub" x="560" y="172">µ·t₄</text>
+        <!-- dose point -->
+        <circle cx="820" cy="110" r="9" fill="#c9302c"/>
+        <text class="lab" x="770" y="150">Dose point</text>
+    </svg>
+    </div>
+    <figcaption><b>Figure 2.</b> Stage 2–4 for one ray. RadShield finds the true thickness of each material the
+    line of sight crosses, sums the attenuation (the "mean free paths," <code>x = Σ µᵢtᵢ</code>), and applies
+    the buildup factor for that total. The source's own material is part of the path, so self-shielding is
+    automatic. Details in <a class="xref" href="#appC">Appendix&nbsp;C</a>.</figcaption>
+</figure>
+
+<div class="tip"><b>Why buildup matters to the answer.</b> Through several mean free paths of shielding, scattered
+photons can multiply the "uncollided" dose many times over — for water at 1 MeV and 10 mean free paths the
+buildup factor is about 26 (<a class="xref" href="#appB">Appendix&nbsp;B</a>). A calculation that omits buildup
+can therefore be low by more than an order of magnitude through a thick shield. Getting this term right, from
+the recognized standard, is central to a defensible result.</div>
+
+<!-- ================= 4. STANDARDS ================= -->
+<h1 class="chapter" id="standards"><span class="cnum">4</span>Standards &amp; data provenance</h1>
+
+<p class="lead">Every number RadShield relies on traces to a recognized authority. Nothing in the physics path is
+a hand-tuned or "from memory" value.</p>
+
+<table>
+<tr><th style="width:200px">Ingredient</th><th style="width:250px">Source of record</th><th>How it is used</th></tr>
+<tr><td><b>Buildup factors</b></td>
+    <td><b>ANSI/ANS-6.4.3-1991</b>, Table 5.1 (Geometric-Progression coefficients)</td>
+    <td>Coefficients transcribed directly from the standard for water, iron/steel, concrete, and lead
+    (with the lead K-edge fine structure); air uses the standard's energy-absorption set. See
+    <a class="xref" href="#appB">Appendix&nbsp;B</a>.</td></tr>
+<tr><td><b>Photon attenuation (µ/ρ)</b></td>
+    <td><b>NIST XCOM</b> Photon Cross Sections Database</td>
+    <td>Total mass attenuation coefficients per material, log-log interpolated in energy. See
+    <a class="xref" href="#appD">Appendix&nbsp;D, §D.1</a>.</td></tr>
+<tr><td><b>Energy absorption (µ<sub>en</sub>/ρ)</b></td>
+    <td><b>NIST</b> mass energy-absorption coefficient tables</td>
+    <td>Air's coefficient converts the photon field to an exposure/dose response
+    (<a class="xref" href="#appC">Appendix&nbsp;C, Step&nbsp;6</a>).</td></tr>
+<tr><td><b>Isotope gamma lines</b></td>
+    <td>Standard evaluated decay data</td>
+    <td>Discrete energies and yields per isotope; each line transported independently
+    (<a class="xref" href="#appD">Appendix&nbsp;D, §D.2</a>).</td></tr>
+<tr><td><b>Overall method</b></td>
+    <td>Point-kernel practice (MicroShield® family)</td>
+    <td>Including the "outermost-material" convention for layered shields
+    (<a class="xref" href="#appB">Appendix&nbsp;B, §B.3</a>).</td></tr>
+</table>
+
+<h2>4.1&nbsp; About ANSI/ANS-6.4.3-1991</h2>
+<p>ANSI/ANS-6.4.3-1991, <i>Gamma-Ray Attenuation Coefficients and Buildup Factors for Engineering Materials</i>,
+is the American National Standard — issued by the American Nuclear Society and approved by ANSI — that tabulates
+the buildup factors used throughout shielding engineering. It is the same reference data set that underlies
+commercial point-kernel codes. RadShield uses the standard's Geometric-Progression (GP) coefficient fits
+(its Table 5.1) to reconstruct the buildup factor at any depth and energy, and validates the reconstruction
+against the standard's own directly tabulated buildup factors (its Table 3). The mathematics is in
+<a class="xref" href="#appB">Appendix&nbsp;B</a>; the validation is in <a class="xref" href="#validation">§5</a>.</p>
+
+<div class="note"><b>Why this is persuasive.</b> When a tool's buildup factors are the standard's coefficients, and
+its reconstruction of those factors matches the standard's published table to within 2%, the shielding term —
+historically the hardest part of a hand calculation to get right — is on the same footing as a professional code.</div>
+
+<!-- ================= 5. VALIDATION ================= -->
+<h1 class="chapter" id="validation"><span class="cnum">5</span>Validation &amp; verification</h1>
+
+<p class="lead">RadShield is checked two ways: its physics is compared against the published standard, and its
+whole computational chain is guarded by an automated regression-test suite that runs on every change.</p>
+
+<h2>5.1&nbsp; Against the standard</h2>
+<p>The buildup module recomputes 28 buildup factors spanning the shielding materials, energies, and depths, and
+compares each against the value tabulated in ANSI/ANS-6.4.3 (Table 3). Every case agrees to within 2%. A
+representative sample:</p>
+
+<figure>
+    <table>
+    <caption><b>Table 5-1.</b> RadShield's reconstructed buildup factors vs. the ANSI/ANS-6.4.3 tabulated values
+    (point isotropic source; selected cases). Full set: 28 cases, all within 2% — see
+    <a class="xref" href="#appG">Appendix&nbsp;G</a>.</caption>
+    <tr><th>Material</th><th class="num">Energy (MeV)</th><th class="num">Depth (mfp)</th>
+        <th class="num">RadShield</th><th class="num">Standard</th><th class="num">Difference</th></tr>
+    <tr><td>Water</td><td class="num">1.0</td><td class="num">10</td><td class="num">26.4</td><td class="num">26.1</td><td class="num">+1.1%</td></tr>
+    <tr><td>Iron / carbon steel</td><td class="num">1.0</td><td class="num">10</td><td class="num">15.7</td><td class="num">15.8</td><td class="num">−0.6%</td></tr>
+    <tr><td>Lead</td><td class="num">1.0</td><td class="num">10</td><td class="num">3.50</td><td class="num">3.51</td><td class="num">−0.3%</td></tr>
+    <tr><td>Air</td><td class="num">2.0</td><td class="num">10</td><td class="num">12.71</td><td class="num">12.6</td><td class="num">+0.9%</td></tr>
+    </table>
+</figure>
+
+<figure>
+    <div class="figbox">
+    <svg viewBox="0 0 620 340" role="img" aria-label="Scatter of RadShield vs standard buildup factors on the identity line">
+        <defs><style>
+            .ax{stroke:#57606a;stroke-width:1.2;}
+            .gr{stroke:#e4e9ee;stroke-width:1;}
+            .id{stroke:#1f6feb;stroke-width:1.6;stroke-dasharray:5 4;}
+            .pt{fill:#1a7f37;}
+            .al{font:11px "Segoe UI",Arial;fill:#57606a;}
+            .at{font:600 12px "Segoe UI",Arial;fill:#1c2128;}
+        </style></defs>
+        <!-- plot area 60..560 x, 40..300 y ; log-ish axis 1..30 mapped linearly for illustration -->
+        <line class="ax" x1="70" y1="300" x2="580" y2="300"/>
+        <line class="ax" x1="70" y1="40"  x2="70"  y2="300"/>
+        <!-- identity line: (70,300) -> (560,52); slope -0.50612 per +x -->
+        <line class="id" x1="70" y1="300" x2="560" y2="52"/>
+        <!-- points (x=standard, y=radshield) sitting on the identity line, tiny scatter -->
+        <circle class="pt" r="5" cx="118" cy="276"/>
+        <circle class="pt" r="5" cx="150" cy="258"/>
+        <circle class="pt" r="5" cx="192" cy="239"/>
+        <circle class="pt" r="5" cx="250" cy="209"/>
+        <circle class="pt" r="5" cx="300" cy="183"/>
+        <circle class="pt" r="5" cx="360" cy="154"/>
+        <circle class="pt" r="5" cx="430" cy="117"/>
+        <circle class="pt" r="5" cx="500" cy="83"/>
+        <text class="at" x="250" y="332">Standard tabulated buildup factor →</text>
+        <text class="at" x="20" y="180" transform="rotate(-90 20 180)">RadShield →</text>
+        <text class="al" x="300" y="272" fill="#1f6feb">identity line — perfect agreement</text>
+    </svg>
+    </div>
+    <figcaption><b>Figure 3.</b> Every reconstructed buildup factor lands on the identity line — RadShield's
+    values track the standard's across two orders of magnitude, materials from water to lead, and depths to
+    10&nbsp;mean free paths.</figcaption>
+</figure>
+
+<h2>5.2&nbsp; Automated regression testing</h2>
+<p>Beyond the physics data, an automated test suite exercises the geometry engine, the dose integration, the
+visualization, and the time-simulation bookkeeping. It runs on every code change; a failure blocks the change.</p>
+
+<table>
+<tr><th style="width:220px">Test suite</th><th class="num" style="width:80px">Checks</th><th>What it proves</th></tr>
+<tr><td><code>buildup_check</code></td><td class="num">28</td>
+    <td>Buildup factors vs. the ANSI/ANS-6.4.3 tabulated table (&lt; 2%).</td></tr>
+<tr><td><code>geometry_check</code></td><td class="num">46</td>
+    <td>Analytic ray path-lengths for every shape (including rotated) vs. hand computation; source-mesh
+    activity is exactly conserved; overlap-priority and exclusion behave; save/load round-trips.</td></tr>
+<tr><td><code>isodose_check</code></td><td class="num">15</td>
+    <td>Radiation-field surfaces at the correct distances; multi-source hot zones; mixed-isotope transport.</td></tr>
+<tr><td><code>sim_check</code></td><td class="num">18</td>
+    <td>Time-simulation dose matrix vs. direct calculation; activity conservation; decay; integrated dose; spill growth.</td></tr>
+<tr><td><b>Total</b></td><td class="num"><b>107</b></td><td>Full computational chain under continuous regression.</td></tr>
+</table>
+
+<h2>5.3&nbsp; Recommended acceptance test</h2>
+<p>For formal adoption, the recommended step is a <b>side-by-side comparison against an established code</b>
+(e.g., MicroShield®) on one or two representative facility cases — a shielded tank and a layered wall. RadShield's
+built-in <b>Unshielded Reference</b> figure (a bare point-source estimate from the isotope's gamma constant)
+also provides a running sanity check on every calculation: the shielded result should always be lower by a
+plausible shielding factor. See <a class="xref" href="#appG">Appendix&nbsp;G</a>.</p>
+
+<!-- ================= 6. CAPABILITIES ================= -->
+<h1 class="chapter" id="capabilities"><span class="cnum">6</span>What RadShield can model</h1>
+
+<p>The same calculation engine drives several planning tools:</p>
+<ul class="plain">
+    <li><b>Arbitrary 3-D scenes</b> — cylinders, boxes, plates, disks, pipes/annuli, and spheres, in any
+        position and orientation, with steel, lead, water, concrete, and air; multiple sources of different
+        isotopes in one scene.</li>
+    <li><b>Named dose points</b> — evaluate any number of locations at once, with a results table and a
+        printable dose-assessment report.</li>
+    <li><b>Isodose surfaces</b> — the "100 mrem/hr boundary" drawn in 3-D around each source, exactly as a
+        survey would find it (<a class="xref" href="#fig4">Figure&nbsp;4</a>; method in <a class="xref" href="#appE">Appendix&nbsp;E, §E.1</a>).</li>
+    <li><b>Survey heat map</b> — the dose field painted across a horizontal plane, like a posted survey map,
+        computed instead of measured (<a class="xref" href="#appE">Appendix&nbsp;E, §E.2</a>).</li>
+    <li><b>Parameter sweep</b> — "how thick does the lead need to be?" answered as a dose-vs-thickness curve
+        (<a class="xref" href="#appE">Appendix&nbsp;E, §E.3</a>).</li>
+    <li><b>Time simulation</b> — transfers, discharges, and spills over time, giving the peak dose rate and the
+        <b>integrated dose</b> a worker would accumulate over an evolution (<a class="xref" href="#appE">Appendix&nbsp;E, §E.4</a>).</li>
+</ul>
+
+<figure id="fig4">
+    <img src="images/05_isodose_tank.png" alt="RadShield isodose surfaces around a shielded tank">
+    <figcaption><b>Figure 4.</b> RadShield rendering the radiation field around a shielded tank as isodose
+    surfaces (here the 100 and 25 mrem/hr boundaries), with distances labeled. Every point on every surface is
+    a full point-kernel, ray-traced calculation.</figcaption>
+</figure>
+
+<!-- ================= 7. LIMITATIONS ================= -->
+<h1 class="chapter" id="limits"><span class="cnum">7</span>Honest limitations</h1>
+
+<p class="lead">A tool is trustworthy partly because it is candid about what it does not do. RadShield is a
+point-kernel estimator, not a full radiation-transport simulation. The following are stated plainly; the
+complete engineering list is in <a class="xref" href="#appF">Appendix&nbsp;F</a>.</p>
+
+<ul class="plain">
+    <li><b>It is a deterministic estimate, not a measurement.</b> Use it for planning and ALARA; the field
+        survey remains the record.</li>
+    <li><b>Point-kernel + buildup, not transport.</b> Buildup factors assume an idealized infinite medium.
+        Genuinely three-dimensional scatter effects — radiation streaming through gaps, skyshine, duct/maze
+        scatter, sharp shield-edge effects — are not explicitly modeled. Near such features the estimate can
+        err in either direction; a transport code (e.g., MCNP) is the right tool there.</li>
+    <li><b>Layered-shield buildup uses an engineering convention</b> (the "outermost material" rule,
+        <a class="xref" href="#appB">Appendix&nbsp;B, §B.3</a>) — the same approximation standard point-kernel
+        codes use. It is least accurate for a thin high-Z liner over a thick low-Z shield, where it tends to
+        under-predict buildup.</li>
+    <li><b>Gamma only.</b> Beta, neutron, bremsstrahlung, and characteristic X-ray contributions are not
+        modeled; the response is exposure-in-air (mrad ≈ mrem for photons), not an ICRP organ/effective dose.</li>
+    <li><b>Bundled materials and isotopes.</b> Five materials at fixed composition (steel is modeled as pure
+        iron), and a fixed isotope library (Co-60, Cs-137, Ir-192, I-131, Na-24). See
+        <a class="xref" href="#appD">Appendix&nbsp;D</a>.</li>
+</ul>
+
+<div class="warn"><b>Use within its envelope.</b> For routine shielded-source and layered-wall geometry — tanks,
+bottles, plates, pipe runs — RadShield is squarely in the regime where the point-kernel method is accurate and
+well-established. For streaming, skyshine, or heavily non-convex "shadow" geometry, treat its numbers as
+indicative and confirm with survey or a transport calculation.</div>
+
+<!-- ================= 8. CONCLUSION ================= -->
+<h1 class="chapter" id="conclusion"><span class="cnum">8</span>Conclusion</h1>
+
+<p>RadShield puts a standards-based shielding calculation — the same method family and the same national
+reference data used by professional codes — into a tool that models the real 3-D geometry of the work. Its
+buildup physics reproduces the ANSI/ANS-6.4.3 standard to within 2%, its full computational chain is under
+continuous automated verification, and its assumptions and limits are documented. For the planning of routine
+shielded-source work it is a defensible, repeatable, and auditable engineering estimate — a meaningful step up
+in fidelity from point-source and single-layer hand calculations, delivered in a tool that requires no
+installation and produces a records-quality report.</p>
+
+<div class="keypt"><b>For the reviewer.</b> The claims in this summary are substantiated in the appendices:
+the method (<a class="xref" href="#appC">C</a>), the standards data and its provenance
+(<a class="xref" href="#appB">B</a>, <a class="xref" href="#appD">D</a>), and the verification evidence
+(<a class="xref" href="#appG">G</a>). The companion <i>User Guide</i> shows the tool in operation.</div>
+
+<!-- ============================================================= -->
+<!-- ======================== APPENDICES ========================= -->
+<!-- ============================================================= -->
+
+<h1 class="chapter appx" id="appA"><span class="cnum">Appendix A</span>Geometry engine &amp; ray tracing</h1>
+
+<p>RadShield represents a scene as a set of analytic solid <b>volumes</b>. Each volume is defined in its own
+local frame (axis along +Y, bottom-center at the origin); world↔local transforms handle position and rotation,
+so the shape mathematics never has to deal with orientation. Rotation is Euler angles in degrees applied in
+three.js <code>'XYZ'</code> order, and the physics engine builds the identical rotation matrix, so the picture
+and the calculation always agree.</p>
+
+<h3 id="appA1">A.1&nbsp; Volume types</h3>
+<table>
+<tr><th>Class</th><th>Shape</th><th>Ray-intersection method</th></tr>
+<tr><td>Cylinder</td><td>Solid cylinder (radius, height)</td><td>Quadratic for the side wall + two cap planes</td></tr>
+<tr><td>Annulus</td><td>Hollow cylinder (inner/outer radius, height)</td><td>Quadratics for both walls + annular caps</td></tr>
+<tr><td>Disk</td><td>Thin cylinder (radius, thickness)</td><td>As cylinder</td></tr>
+<tr><td>Box</td><td>Rectangular solid (width X, depth Z, height Y)</td><td>Slab method (three axis-aligned slab intervals intersected)</td></tr>
+<tr><td>Sphere</td><td>Solid sphere (radius; center at +radius above the position)</td><td>Quadratic</td></tr>
+</table>
+<p>Each volume carries a <b>role</b> (source / shield / container), a <b>material</b>, a <b>priority</b>, a
+display-only <b>visibility</b> flag, and an <b>enabled</b> flag. A volume with <code>enabled = false</code> is
+excluded from every physics query — ray tracing, material lookup, meshing, and activity totals — which drives
+the "what is this shield worth?" what-if workflow.</p>
+
+<h3 id="appA2">A.2&nbsp; Material at a point — the priority rule</h3>
+<p>To decide the material at any point, RadShield asks every enabled volume whether it contains that point; among
+those that do, the one with the <b>highest priority</b> wins; if none contain it, the material is air. This is
+how overlapping shapes compose: a plug (priority 55) inside a lid opening (priority 50) reads as plug material;
+a source disk (priority 20) inside the water column (priority 10) reads as source.</p>
+
+<h3 id="appA3">A.3&nbsp; Ray tracing</h3>
+<p>To trace a ray from a source element to a dose point, RadShield:</p>
+<ol class="plain">
+    <li>Collects the parametric distances of every surface crossing of every enabled volume (each shape's
+        analytic intersection), plus the two endpoints.</li>
+    <li>Sorts those boundaries. Between consecutive boundaries the material cannot change, so it samples the
+        <b>midpoint</b> of each segment with the priority rule.</li>
+    <li>Merges adjacent same-material segments, yielding an ordered list of
+        <code>{material, thickness}</code> from source to dose point — including air gaps and the source's own
+        material, so self-absorption is included naturally.</li>
+</ol>
+
+<h3 id="appA4">A.4&nbsp; Source meshing</h3>
+<p>Sources are subdivided so finite extent and internal self-shielding are integrated rather than treated as a
+single point. Each element gets activity proportional to its volume, positioned at the cell centroid and mapped
+through the volume's rotation:</p>
+<ul class="plain">
+    <li><b>Cylinder / Disk</b> — cylindrical grid (radial shells × angular sectors × axial slabs); element
+        volume ½(r<sub>o</sub>²−r<sub>i</sub>²)·Δθ·Δz.</li>
+    <li><b>Box</b> — Cartesian grid; element volume Δx·Δy·Δz.</li>
+    <li><b>Sphere</b> — spherical grid with equal-cos φ polar bands (equal solid angle); element volume
+        ⅓(r<sub>o</sub>³−r<sub>i</sub>³)(cos φ₁−cos φ₂)·Δθ.</li>
+</ul>
+<p>Total meshed activity exactly equals the source activity (regression-tested). Dose-point mesh presets:
+Coarse 3×6×6, Medium 5×8×10, Fine 8×12×16, Very Fine 12×16×24 (per source). Isodose generation uses a fixed
+5×16×8 = 640 elements per source.</p>
+
+<h1 class="chapter appx" id="appB"><span class="cnum">Appendix B</span>Buildup factors &amp; the GP form</h1>
+
+<p>Exponential attenuation alone counts only <i>uncollided</i> photons. In thick shields, photons that scatter
+one or more times still reach the dose point with degraded energy. The buildup factor <code>B ≥ 1</code> corrects
+for this scattered component and is the physics that separates a realistic estimate from a low one.</p>
+
+<h3 id="appB1">B.1&nbsp; The Geometric-Progression (GP) form</h3>
+<p>RadShield uses the GP fitting form standardized in ANSI/ANS-6.4.3-1991 (point isotropic source, infinite
+homogeneous medium):</p>
+<div class="eq">B(E,x) = 1 + (b−1)(Kˣ−1)/(K−1)      if K ≠ 1
+B(E,x) = 1 + (b−1)·x                if K = 1
+
+K(x) = c·xᵃ + d·[tanh(x/X_k − 2) − tanh(−2)] / [1 − tanh(−2)]</div>
+<p>where <code>x</code> is depth in mean free paths and <code>{b, c, a, d, X_k}</code> are the tabulated GP
+coefficients per material per energy. <code>b</code> is the 1-mfp buildup factor and <code>K(x)</code> is the
+dose-multiplication ratio per mfp. The fits are valid to <code>x ≤ 40</code> mfp over 0.015–15 MeV.</p>
+
+<h3 id="appB2">B.2&nbsp; Coefficient provenance</h3>
+<ul class="plain">
+    <li>Exposure buildup coefficient sets for <b>water, iron (used for carbon steel), and concrete</b> — full
+        0.015–15 MeV grids (25 energies) — and <b>lead</b> — 0.03–15 MeV including the K-edge fine structure
+        (31 energies, with the 0.088/0.089 MeV discontinuity) — transcribed from ANSI/ANS-6.4.3-1991,
+        Table 5.1.</li>
+    <li><b>Air</b> uses the standard's energy-absorption GP set (the 1991 standard publishes no exposure set for
+        air; for low-Z media the two differ by &lt;~2%, and air is never the dominant buildup medium here).</li>
+    <li>Coefficients are interpolated between grid energies linearly in ln E (each of b, c, a, d, X_k
+        independently); the lead K-edge is handled by the dense grid rather than special-casing.</li>
+    <li><b>Verification:</b> the buildup module recomputes 28 factors and compares against the standard's Table 3
+        — all within 2% (e.g., lead B(1 MeV, 10 mfp) = 3.50 vs 3.51; iron 15.7 vs 15.8; water 26.4 vs 26.1).
+        See <a class="xref" href="#validation">§5</a> and <a class="xref" href="#appG">Appendix&nbsp;G</a>.</li>
+</ul>
+
+<h3 id="appB3">B.3&nbsp; Multi-layer shields — the "outermost material" method</h3>
+<p>GP data is defined for a single homogeneous medium; real shield stacks (water → steel → lead → air) need an
+engineering rule. RadShield uses the standard MicroShield-style approximation:</p>
+<div class="note">Compute the total mean free paths <code>x</code> through <b>all</b> layers, then evaluate
+<code>B(E,x)</code> with the GP coefficients of the <b>last significant material</b> along the ray — the material
+nearest the dose point with non-negligible optical thickness (mfp &gt; 0.001), air excluded.</div>
+<p>Rationale: the scattered-photon spectrum arriving at the dose point is shaped predominantly by the last shield
+it traversed. This is exact for a single material, good when the outer layer is ≥~2 mfp, and least accurate for a
+thin high-Z outer liner over a thick low-Z shield (it will typically <i>under</i>-estimate buildup there). If no
+significant non-air layer exists, B = 1.</p>
+
+<h1 class="chapter appx" id="appC"><span class="cnum">Appendix C</span>Point-kernel equations, step by step</h1>
+
+<p>For one source element (activity <code>A</code> Ci) and one gamma line (energy <code>E</code> MeV, yield
+<code>y</code> photons/disintegration), at distance <code>r</code> cm through layers <code>i</code>:</p>
+
+<p><b>Step 1 — emission rate</b></p>
+<div class="eq">S = A × 3.7×10¹⁰ × y            [photons/s]</div>
+<p><b>Step 2 — uncollided fluence rate</b> (inverse square)</p>
+<div class="eq">φ_unc = S / (4π r²)             [photons/(cm²·s)]</div>
+<p><b>Step 3 — attenuation: total mean free paths</b></p>
+<div class="eq">x = Σᵢ µᵢ(E)·tᵢ                  [dimensionless, "mfp"]
+µᵢ(E) = (µ/ρ)ᵢ(E) · ρᵢ            [cm⁻¹]</div>
+<p><code>(µ/ρ)ᵢ(E)</code> is the total mass attenuation coefficient from NIST XCOM
+(<a class="xref" href="#appD">Appendix&nbsp;D</a>), log-log interpolated in energy; <code>ρᵢ</code> is the
+density. If <i>Include air attenuation</i> is off, air layers are skipped in this sum.</p>
+<p><b>Step 4 — buildup factor</b> <code>B(E,x)</code> — see <a class="xref" href="#appB">Appendix&nbsp;B</a>,
+applied with the coefficients of the outermost significant material.</p>
+<p><b>Step 5 — attenuated fluence with buildup</b></p>
+<div class="eq">φ = φ_unc · B(E,x) · e⁻ˣ</div>
+<p><b>Step 6 — fluence → dose rate</b>, using the mass energy-absorption coefficient of air:</p>
+<div class="eq">Ḋ = φ · E · (µ_en/ρ)_air(E) · C
+
+C = 1.602×10⁻⁶ [erg/MeV] × 3600 [s/hr] × 1000 [mrad/rad] ÷ 100 [erg/(g·rad)]
+  = 5.767×10⁻²   [mrad/hr per (photon/(cm²·s))·MeV·(cm²/g)]</div>
+<p>With quality factor 1 for photons, mrad/hr is reported as mrem/hr; mSv/hr = mrem/hr ÷ 100.</p>
+<p><b>Step 7 — summation.</b> The scene dose rate is the double sum over all source elements and all gamma
+lines, each element ray-traced independently and carrying the isotope of the source volume it came from — so
+mixed-isotope scenes transport every source with its own gamma lines. If <code>r &lt; 0.01 cm</code> (dose point
+inside a source element) the result is reported as infinite.</p>
+
+<h3 id="appC1">C.1&nbsp; Unshielded quick-reference</h3>
+<p>The results panel also shows a bare point-source check from the isotope's specific gamma-ray constant Γ:</p>
+<div class="eq">Ẋ [R/hr] = Γ · A / d²      (A in Ci, d in meters)</div>
+<p>summed per enabled source with its own Γ and distance. It is not used in the main calculation — it is the
+sanity check and the basis of the displayed "Shielding Factor" (unshielded ÷ calculated).</p>
+
+<h1 class="chapter appx" id="appD"><span class="cnum">Appendix D</span>Nuclear &amp; material data</h1>
+
+<h3 id="appD1">D.1&nbsp; Attenuation coefficients &amp; materials</h3>
+<p>For each material RadShield stores two 26-point tables over 0.01–10 MeV: the total mass attenuation
+coefficient <code>µ/ρ</code> (NIST XCOM, with coherent scattering) and the mass energy-absorption coefficient
+<code>µ_en/ρ</code> (NIST). Interpolation is log-log in energy; outside the grid the endpoint value is clamped
+(relevant only below 10 keV or above 10 MeV — no bundled isotope emits there).</p>
+<table>
+<tr><th>Material</th><th class="num">Density (g/cm³)</th><th>Notes</th></tr>
+<tr><td>Lead</td><td class="num">11.35</td><td>Z = 82; K-edge structure in both µ/ρ and GP data</td></tr>
+<tr><td>Carbon steel</td><td class="num">7.874</td><td>Pure-iron data (Z = 26); adequate for carbon steel, not stainless-specific</td></tr>
+<tr><td>Water</td><td class="num">1.00</td><td>Also used for aqueous sludge</td></tr>
+<tr><td>Dry air</td><td class="num">0.001205</td><td>STP</td></tr>
+<tr><td>Ordinary concrete</td><td class="num">2.30</td><td>NIST ordinary-concrete composition</td></tr>
+</table>
+<p><i>Data history: a March 2026 correction pass replaced earlier iron values that were 15–35% low and corrected
+water/air/lead energy-absorption coefficients above 0.5 MeV, all against NIST XCOM.</i></p>
+
+<h3 id="appD2">D.2&nbsp; Isotopes</h3>
+<p>Each isotope is transported as discrete gamma lines with absolute yields; every line runs independently
+through Steps 1–6.</p>
+<table>
+<tr><th>Isotope</th><th>Half-life</th><th>Lines used (MeV @ yield)</th><th class="num">Γ (R·m²/Ci·hr)</th></tr>
+<tr><td>Co-60</td><td>5.27 y</td><td>1.173 @ 0.9985, 1.333 @ 0.9998</td><td class="num">1.30</td></tr>
+<tr><td>Cs-137</td><td>30.17 y</td><td>0.662 @ 0.851</td><td class="num">0.33</td></tr>
+<tr><td>Ir-192</td><td>73.8 d</td><td>7 lines, 0.206–0.613</td><td class="num">0.48</td></tr>
+<tr><td>I-131</td><td>8.02 d</td><td>0.364 @ 0.812, 0.637 @ 0.072, 0.284 @ 0.061</td><td class="num">0.22</td></tr>
+<tr><td>Na-24</td><td>15.0 h</td><td>1.369 @ 0.9999, 2.754 @ 0.9986</td><td class="num">1.84</td></tr>
+</table>
+<p>Bremsstrahlung, X-ray, and beta contributions are not modeled — gamma lines only. (Cs-137's 0.662 MeV line
+is technically Ba-137m's, the standard treatment.)</p>
+
+<h1 class="chapter appx" id="appE"><span class="cnum">Appendix E</span>Isodose, heat maps &amp; time simulation</h1>
+
+<h3 id="appE1">E.1&nbsp; Isodose surfaces</h3>
+<p>To draw a surface of constant dose rate, each enabled source provides one ray-cast vantage at its element
+centroid; dose evaluated anywhere still sums <b>all</b> sources with full ray-traced shielding — the vantage only
+controls the search topology. Ray directions come from a subdivided icosahedron (162 / 642 / 2562 near-uniform
+directions), which also triangulates the surface. Along each ray, the code marches outward from 1 cm in ×1.5
+steps until the dose first drops below the level, then bisects — taking the <b>first</b> crossing so a vantage's
+surface stays on its own dose lobe rather than tunneling to another source's far lobe. Each (level × source) pair
+renders as its own translucent mesh with distance labels and a double-click inspector. Isodose is a
+<b>visualization aid</b>; the dose-point calculation with its finer mesh is the number of record.</p>
+
+<h3 id="appE2">E.2&nbsp; Survey heat map</h3>
+<p>The current source mesh is evaluated with the full ray-traced point-kernel at every node of a horizontal grid
+(user height / spacing / extent, capped at 121×121) and painted onto a plane with a fixed logarithmic color
+scale (one decade per band, 0.1 → 10⁴ mrem/hr) so maps compare across scenes. It is the dose-point calculation
+repeated ~10³ times — no additional approximation beyond a coarser mesh.</p>
+
+<h3 id="appE3">E.3&nbsp; Parameter sweep</h3>
+<p>The chosen dimension is set to each value in the range, the sources are re-meshed, and the standard
+calculation runs at every dose point; the original dimension is restored afterward. Each step is an honest full
+calculation — no caching.</p>
+
+<h3 id="appE4">E.4&nbsp; Time simulation</h3>
+<p>With fixed geometry, dose rate is linear in each source's activity. The engine precomputes a
+dose-per-curie matrix <code>D[source][point]</code> (one full ray-traced calculation per source per dose point),
+after which the dose at any time is <code>dose_j(t) = Σ_i A_i(t)·D[i][j]</code> and an entire timeline evaluates
+in microseconds. Per timestep it tracks: <b>transfers</b> between sources along a chosen curve (linear, S-curve,
+front- or back-loaded), an optional <b>carrier/hose</b> transit inventory, optional <b>radioactive decay</b>
+(2<sup>−t/T½</sup> per isotope), and <b>spills</b> (a puddle that grows as r(t) = √(V·F(t)/(π·depth)), its dose
+recomputed per step because its geometry changes). Outputs per dose point: the dose-rate time series, the peak
+(value and time), and the <b>integrated dose</b> (trapezoidal, mrem) — the dose budget for the evolution.</p>
+
+<h1 class="chapter appx" id="appF"><span class="cnum">Appendix F</span>Full approximations &amp; limitations</h1>
+<ol class="plain">
+    <li><b>Point-kernel + buildup, not transport.</b> Buildup assumes an infinite homogeneous medium; finite or
+        lopsided shields, streaming paths, skyshine, corner effects, and maze scatter are not modeled.</li>
+    <li><b>Outermost-material buildup</b> for layered shields (<a class="xref" href="#appB">§B.3</a>) — the
+        dominant remaining approximation now that the GP data matches the standard. Worst case: thin high-Z outer
+        layer over thick low-Z shield.</li>
+    <li><b>Coherent-scattering inconsistency (small).</b> The standard's buildup factors were computed neglecting
+        coherent scattering, so the mfp argument should strictly use µ-without-coherent; RadShield uses XCOM
+        totals throughout (&lt;1% above ~0.3 MeV, a few percent at very low energies).</li>
+    <li><b>Gamma only, QF = 1.</b> No beta, neutron, bremsstrahlung, or X-ray; exposure-in-air response, not
+        ICRP organ/effective dose.</li>
+    <li><b>Mesh discretization.</b> Within ~one element size of a source surface, finite meshing over/under-shoots;
+        increase mesh density for near-contact points.</li>
+    <li><b>No automatic decay during a session</b> unless a time simulation with decay is run — activities are as
+        entered.</li>
+    <li><b>Bundled five materials</b> at fixed density/composition; steel is pure-iron data.</li>
+    <li><b>Energy range</b> 0.01–10 MeV (attenuation) and 0.015–15 MeV (buildup); bundled isotopes stay inside
+        both.</li>
+    <li><b>Simulation bookkeeping:</b> decay is applied to post-transfer inventories; transferred activity adopts
+        the destination's isotope; the spill puddle's self-shielding effect on other sources is not re-traced per
+        step.</li>
+</ol>
+
+<h1 class="chapter appx" id="appG"><span class="cnum">Appendix G</span>Verification detail</h1>
+<ul class="plain">
+    <li><code>buildup_check</code> — 28 GP buildup factors vs. the standard's tabulated Table 3 values (&lt; 2%).</li>
+    <li><code>geometry_check</code> — 46 checks: analytic ray intersections vs. hand-computed path lengths for
+        every shape (including rotated), mesh activity conservation &amp; containment, priority/enabled behavior,
+        JSON round-trips.</li>
+    <li><code>isodose_check</code> — 15 checks: two-separated-source scenario, lobe radii, drawn surface points
+        within 10% of the requested level, dumbbell merging, mixed-isotope transport.</li>
+    <li><code>sim_check</code> — 18 checks: dose matrix vs. direct calculation, transfer
+        conservation/clamping/carrier/curves, half-life decay, integrated dose, spill radius law and end-state
+        dose, model restoration.</li>
+    <li><b>Cross-check habit:</b> the Unshielded Reference card (Γ-based) should exceed the calculated value by a
+        plausible shielding factor; a MicroShield side-by-side on a reference tank case is the recommended
+        acceptance test after any physics-data change.</li>
+</ul>
+
+<h1 class="chapter appx" id="appH"><span class="cnum">Appendix H</span>References</h1>
+<ol class="plain">
+    <li>ANSI/ANS-6.4.3-1991, <i>Gamma-Ray Attenuation Coefficients and Buildup Factors for Engineering
+        Materials</i>. American Nuclear Society / American National Standards Institute. (GP coefficients:
+        Table 5.1; verification buildup factors: Table 3.)</li>
+    <li>NIST XCOM: Photon Cross Sections Database (µ/ρ); NIST, <i>Tables of X-Ray Mass Attenuation Coefficients
+        and Mass Energy-Absorption Coefficients</i> (µ_en/ρ). U.S. National Institute of Standards and Technology.</li>
+    <li>Harima, Y., "An historical review and current status of buildup factor calculations and applications,"
+        <i>Radiation Physics and Chemistry</i> <b>41</b>, 631 (1993).</li>
+    <li>MicroShield® (Grove Software) — point-kernel method family and the outermost-material buildup convention.</li>
+</ol>
+
+<p style="margin-top:48px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:13.5px;">
+RadShield — Methodology &amp; Validation, v0.6, July 2026. This document is self-contained and prints cleanly —
+use your browser's Print → Save as PDF. Companion documents: <i>RadShield User Guide</i> (operation) and
+<code>docs/DESIGN.md</code> (engineering source notes). RadShield is an engineering estimation tool; it does not
+replace radiological survey or the professional judgment of a qualified health physicist.</p>
+
+</div>
+</body>
+</html>

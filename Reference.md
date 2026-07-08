@@ -65,7 +65,8 @@ Portable build: `RadShield_Portable_v5.html` (now the build script's default out
 
 ## Documentation
 - **`RadShield_User_Guide.html`** (repo root) — THE user guide: polished self-contained manual (3.7 MB, 16 screenshots embedded as data URIs, print-to-PDF stylesheet). 12 chapters: UI tour, tank quick-start, custom geometry, relationships, measuring, calc-exclude, isodose, pipe builder, save/load, worked examples, troubleshooting. Source: `docs/guide_src.html` (edit this) + `docs/images/`; rebuild with `node tools/build_guide.js`. Screenshots captured from the real app via headless Edge (puppeteer-core, shots_a.js/shots_b.js pattern in session scratchpad) — recapture if the UI changes. `docs/HOW_TO.md` is just a pointer.
-- **`docs/DESIGN.md`** — physics: point-kernel equations step by step, GP buildup formula + ANS-6.4.3 provenance, outermost-material multi-layer rule, NIST XCOM data, meshing math per shape, isodose algorithm, full approximations/limitations list, verification summary.
+- **`docs/DESIGN.md`** — physics: point-kernel equations step by step, GP buildup formula + ANS-6.4.3 provenance, outermost-material multi-layer rule, NIST XCOM data, meshing math per shape, isodose algorithm, full approximations/limitations list, verification summary. This is the terse engineering source; the polished manager-facing version is below.
+- **`RadShield_Design_Document.html`** (repo root) — polished, self-contained "Methodology & Validation" document for sharing with supervisors/reviewers: plain-language executive summary, standards emphasis (ANSI/ANS-6.4.3 + NIST), inline SVG figures (method pipeline, layered ray, validation scatter), and technical detail moved into cross-referenced Appendices A–H. Source: `docs/design_src.html` (edit this) + embeds `docs/images/05_isodose_tank.png`; rebuild with `node tools/build_design.js`. Keep in sync with DESIGN.md when physics changes.
 
 ## Real-World Use Case
 The user works with **reactor plant waste processing**:
@@ -123,11 +124,13 @@ RadShield/
 ├── RadShield_Portable_v4.html  # v4 - outdated (pre box/sphere, has Save/Load tank bug)
 ├── RadShield_Portable_v5.html  # v5 - CURRENT portable version (built, do not edit)
 ├── RadShield_User_Guide.html   # Polished self-contained user manual (built, do not edit)
+├── RadShield_Design_Document.html # Polished "Methodology & Validation" doc for reviewers (built, do not edit)
 ├── docs/
 │   ├── guide_src.html          # User guide SOURCE (edit this, then node tools/build_guide.js)
+│   ├── design_src.html         # Design doc SOURCE (edit this, then node tools/build_design.js)
 │   ├── HOW_TO.md               # Pointer to the user guide
-│   ├── DESIGN.md               # Physics design doc: equations, data provenance, approximations
-│   └── images/                 # 16 tutorial screenshots captured headlessly from the app
+│   ├── DESIGN.md               # Physics design doc SOURCE-OF-TRUTH (terse); design_src.html is the polished derivative
+│   └── images/                 # Tutorial + doc screenshots captured headlessly from the app
 ├── src/
 │   ├── materials.js            # NIST XCOM attenuation data + ANS-6.4.3 GP buildup factors
 │   ├── isotopes.js             # Isotope gamma lines (Co-60, Cs-137, etc.)
@@ -139,7 +142,8 @@ RadShield/
 ├── TransformControls.js        # three.js r128 gizmo (cached for offline build)
 ├── tools/
 │   ├── build_portable.js       # node tools/build_portable.js -> rebuilds portable HTML
-│   └── build_guide.js          # node tools/build_guide.js -> rebuilds the user guide
+│   ├── build_guide.js          # node tools/build_guide.js -> rebuilds the user guide
+│   └── build_design.js         # node tools/build_design.js -> rebuilds the design document
 ├── tests/
 │   ├── buildup_check.js        # GP buildup regression test vs ANS-6.4.3 Table 3 (node)
 │   ├── geometry_check.js       # Transform/ray-trace/serialization regression test (node)

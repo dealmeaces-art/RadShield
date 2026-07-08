@@ -1,6 +1,6 @@
 # RadShield — Design Document: Radiological & Shielding Calculations
 
-*For RadShield v0.5. This document describes exactly how the code computes dose rates — the method, the equations, the data and its provenance, and the approximations. File references point at the modules in `src/`.*
+*For RadShield v0.6. This document describes exactly how the code computes dose rates — the method, the equations, the data and its provenance, and the approximations. File references point at the modules in `src/`. This is the terse engineering source-of-truth; for a polished, manager-facing version of the same material (executive summary, figures, standards emphasis, cross-references) see **`RadShield_Design_Document.html`** in the repo root, built from `docs/design_src.html` via `node tools/build_design.js`.*
 
 ---
 
