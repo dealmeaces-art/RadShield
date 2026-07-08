@@ -149,7 +149,7 @@
 <div class="cover">
     <div class="product">RadShield</div>
     <div class="doctitle">User Guide</div>
-    <div class="meta">Version 0.5 &nbsp;•&nbsp; July 2026 &nbsp;•&nbsp; for <code>RadShield_Portable_v5.html</code></div>
+    <div class="meta">Version 0.6 &nbsp;•&nbsp; July 2026 &nbsp;•&nbsp; for <code>RadShield_Portable_v6.html</code></div>
     <p class="blurb">RadShield is a gamma dose-rate calculator that runs entirely in your web browser.
     You build a 3D model of your radioactive sources and shielding, place a dose point, and RadShield
     computes the dose rate by point-kernel integration with ANSI/ANS-6.4.3 buildup factors.
@@ -166,7 +166,7 @@
     <li><span class="n">3</span><a href="#ch3">Quick start: your first dose calculation</a></li>
     <li><span class="n">4</span><a href="#ch4">Building custom geometry</a></li>
     <li><span class="n">5</span><a href="#ch5">Positioning with Relationships</a></li>
-    <li><span class="n">6</span><a href="#ch6">Measuring distances</a></li>
+    <li><span class="n">6</span><a href="#ch6">Measuring with smart snapping</a></li>
     <li><span class="n">7</span><a href="#ch7">Controlling what is calculated</a></li>
     <li><span class="n">8</span><a href="#ch8">Isodose maps of the radiation field</a></li>
     <li><span class="n">9</span><a href="#ch9">Survey heat map &amp; parameter sweep</a></li>
@@ -185,7 +185,7 @@
 
 <div class="procedure"><div class="ptitle">To run RadShield</div>
 <ol>
-    <li>Copy <code>RadShield_Portable_v5.html</code> anywhere — desktop, USB stick, network share.</li>
+    <li>Copy <code>RadShield_Portable_v6.html</code> anywhere — desktop, USB stick, network share.</li>
     <li>Double-click it. It opens in your default browser (Edge, Chrome, and Firefox all work) and runs completely offline.</li>
 </ol>
 </div>
@@ -223,7 +223,9 @@ is documented separately in <code>docs/DESIGN.md</code>.</div>
 <tr><td>4</td><td>Ribbon — <b>Mode</b></td>
     <td><span class="ui">Select</span> <span class="key">V</span>, <span class="ui">Move</span> <span class="key">G</span>, <span class="ui">Rotate</span> <span class="key">R</span> — what your mouse does in the 3D view.</td></tr>
 <tr><td>5</td><td>Ribbon — <b>Inspect</b></td>
-    <td><span class="ui">Smart Dim</span> <span class="key">S</span>, <span class="ui">Measure</span> <span class="key">M</span>, <span class="ui">Dose Pt</span> <span class="key">D</span>.</td></tr>
+    <td><span class="ui">Smart Dim</span> <span class="key">S</span>, <span class="ui">Measure</span> <span class="key">M</span>, <span class="ui">Dose Pt</span> <span class="key">D</span>.
+    Smart Dim and Measure both use <b>smart snapping</b> — hover an object and the cursor locks to real
+    geometry (corners, edges, centers). See chapter 6.</td></tr>
 <tr><td>6</td><td>Ribbon — <b>Relationships</b></td>
     <td>Six snap operations that place one object precisely against another. See chapter 5.</td></tr>
 <tr><td>7</td><td>Ribbon — <b>Insert</b></td>
@@ -396,7 +398,10 @@ inflate every result. Any shape can be converted to a source afterward (§4.4).<
 <div class="procedure"><div class="ptitle">Procedure — Smart Dimension (the fast way)</div>
 <ol>
     <li>Press <span class="key">S</span> or click <span class="ui">Smart Dim</span> in the ribbon.</li>
-    <li>Click any object in the 3D view. A popup opens at your cursor with exactly that object's dimensions.</li>
+    <li>Move over the 3D view — the object under the cursor lights up and the face you are pointing at is
+        highlighted (the same smart-snapping visuals as Measure, chapter 6), so you can see exactly what
+        you're about to click.</li>
+    <li>Click the object. A popup opens at your cursor with exactly that object's dimensions.</li>
     <li>Type new values — each applies the moment you leave the field (and is undoable with <span class="key">Ctrl+Z</span>).</li>
     <li>Click another object to edit it next, or press <span class="key">Esc</span> to close.</li>
 </ol>
@@ -509,23 +514,98 @@ target, the mover does not follow — re-apply the relationship. The same operat
 selecting the mover, right-clicking the target, and using the <b>Align … to this</b> submenu.</div>
 
 <!-- ================= CH 6 ================= -->
-<h1 class="chapter" id="ch6"><span class="cnum">6</span>Measuring distances</h1>
+<h1 class="chapter" id="ch6"><span class="cnum">6</span>Measuring with smart snapping</h1>
 
-<div class="procedure"><div class="ptitle">Procedure — measure between two points</div>
+<p class="lead">The <span class="ui">Measure</span> tool reports the straight-line distance and the X / Y / Z
+offsets between any two points. Crucially, it doesn't make you aim at empty space — as you hover, the cursor
+<b>snaps to the real geometry</b> (corners, edges, rim quadrants, face and axis centers), the same key-point
+snapping you'd expect in SolidEdge. Every measurement is anchored to a feature you can name.</p>
+
+<h2>6.1&nbsp; How snapping works</h2>
+
+<p>Enter Measure mode (<span class="key">M</span> or <span class="ui">Measure</span>) and move the mouse over
+an object — three things happen at once:</p>
+<ul class="plain">
+    <li>The object under the cursor <b>lights up</b>, and the <b>specific face</b> you are pointing at is
+        outlined in cyan (a panel on a box, the end cap of a cylinder, the rings of a pipe wall).</li>
+    <li>A colored <b>snap marker</b> jumps to the nearest key point, with a small label naming it
+        (<i>Top center</i>, <i>Corner</i>, <i>Rim quadrant</i>, …).</li>
+    <li>The marker's <b>shape and color</b> tell you what kind of point it is (table below), so you know at a
+        glance whether you're on a corner, an edge, or a center.</li>
+</ul>
+
+<figure>
+    <img src="images/22_snap_hover.png" alt="Hovering an object in Measure mode: face highlight, snap marker, and label">
+    <figcaption><b>Figure 6-1.</b> Hovering the tank in Measure mode. The cyan rings highlight the surfaces
+    under the cursor and the magenta ring marks the snapped <b>Top center</b> key point — labelled right at
+    the cursor. The how-to bar along the bottom always restates the current behavior.</figcaption>
+</figure>
+
+<table>
+<tr><th style="width:140px">Marker</th><th style="width:170px">Key point</th><th>Where it appears</th></tr>
+<tr><td><b>Amber cube</b></td><td>Corner / vertex</td>
+    <td>The 8 corners of a box; the top and bottom poles of a sphere. Highest priority — corners win ties.</td></tr>
+<tr><td><b>Cyan diamond</b></td><td>Edge midpoint / rim quadrant</td>
+    <td>The midpoint of each box edge; the four quarter points (front / back / left / right) around the rim of
+    a cylinder, disk, pipe, or sphere.</td></tr>
+<tr><td><b>Magenta ring</b></td><td>Face or axis center</td>
+    <td>The center of each box face; the top, bottom, and mid-height center of a cylinder or disk; the axis
+    top and bottom of a pipe (annulus); a sphere's center.</td></tr>
+<tr><td><b>White dot</b></td><td>On the surface / on the floor</td>
+    <td>The fallback when no key point is close — the exact spot on the face, or on the floor grid, under the cursor.</td></tr>
+</table>
+
+<div class="tip"><b>Nearest wins, but corners beat edges beat centers.</b> When two key points are about equally
+close to the cursor, the higher-priority one is chosen (a corner over an edge, an edge over a center). To grab
+a specific point, just nudge the cursor a little closer to it.</div>
+
+<h2>6.2&nbsp; Taking a measurement</h2>
+
+<div class="procedure"><div class="ptitle">Procedure — measure between two features</div>
 <ol>
-    <li>Press <span class="key">M</span> or click <span class="ui">Measure</span> in the ribbon.</li>
-    <li>Click the first point — any object surface, or the floor grid.</li>
-    <li>Click the second point. A line and label appear with the <b>total distance</b> (inches and feet)
-        and the <b>ΔX / ΔY / ΔZ</b> components. The status line repeats the numbers with both endpoint coordinates.</li>
-    <li>Click again to start the next measurement; <span class="key">Esc</span> exits and clears the graphics.</li>
+    <li>Press <span class="key">M</span> or click <span class="ui">Measure</span>.</li>
+    <li>Hover the first feature until the marker and label show the point you want, then <b>click</b>.
+        A green dot marks it.</li>
+    <li>Move toward the second feature. A <b>dashed preview line</b> stretches from the first point to the
+        live snap, so you can watch the measurement form before you commit.</li>
+    <li>Click the second feature. The line locks in with a label showing the <b>total distance</b> (inches
+        and feet) and the <b>ΔX / ΔY / ΔZ</b> components; the status line repeats it with both endpoint
+        coordinates.</li>
+    <li>Click again to start a fresh measurement; <span class="key">Esc</span> exits and clears the graphics.</li>
 </ol>
 </div>
 
 <figure>
-    <img src="images/12_measure.png" alt="Measurement between two points">
-    <figcaption><b>Figure 6-1.</b> A measurement: 53.89" (4.49 ft) total, with the per-axis deltas on the label
-    and full endpoint coordinates in the status line.</figcaption>
+    <img src="images/23_snap_measure.png" alt="A measurement in progress: first point placed, dashed preview to the live snap">
+    <figcaption><b>Figure 6-2.</b> First point placed on the plug at the top (green dot); the dashed preview
+    line tracks down to the live snap — here a <b>Rim quadrant</b> (cyan diamond) at the tank floor.</figcaption>
 </figure>
+
+<figure>
+    <img src="images/24_snap_result.png" alt="Completed measurement with distance and per-axis delta label">
+    <figcaption><b>Figure 6-3.</b> The finished measurement: 48.40" (4.03 ft), with the per-axis deltas on the
+    label and the full endpoint coordinates echoed in the status line.</figcaption>
+</figure>
+
+<h2>6.3&nbsp; Example: the exact height of a tank</h2>
+
+<p>This is the measurement snapping was built for — the overall height from the top of the plug to the
+bottom of the tank, with nothing to eyeball:</p>
+
+<div class="procedure"><div class="ptitle">Procedure — plug top to tank bottom</div>
+<ol>
+    <li>Press <span class="key">M</span>. Orbit so you can see both the plug on top and the base of the tank.</li>
+    <li>Hover the top of the plug until the marker reads <b>Top center</b> (magenta ring), and click.</li>
+    <li>Move down to the base and hover until it reads <b>Bottom center</b> — or a <b>Rim quadrant</b> on the
+        floor if the underside is hidden — and click.</li>
+    <li>Read the height straight off the label. If the two points share the same X and Z, the <b>ΔY</b> value
+        <i>is</i> the pure vertical height.</li>
+</ol>
+</div>
+
+<div class="tip"><b>Snapping helps Smart Dimension too.</b> In <span class="ui">Smart Dim</span> mode the same
+hover highlight shows exactly which object — and which face — you are about to click before the dimension
+popup opens, so you never edit the wrong part.</div>
 
 <!-- ================= CH 7 ================= -->
 <h1 class="chapter" id="ch7"><span class="cnum">7</span>Controlling what is calculated</h1>
@@ -919,7 +999,7 @@ and can be emailed alongside the portable HTML so a colleague can reproduce your
 </table>
 
 <p style="margin-top:48px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:14px;">
-RadShield User Guide — v0.5, July 2026. Physics &amp; methodology: <code>docs/DESIGN.md</code>.
+RadShield User Guide — v0.6, July 2026. Physics &amp; methodology: <code>docs/DESIGN.md</code>.
 This document is self-contained (images embedded) and prints cleanly — use your browser's Print → Save as PDF.</p>
 
 </div>
