@@ -922,6 +922,24 @@
                         <span class="sim-time" id="simTimeLabel">0.0 min</span>
                     </div>
                     <table class="sim-table" id="simSummary"></table>
+
+                    <div style="margin-top:12px; border-top:1px solid #30363d; padding-top:10px;">
+                        <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600;">
+                            <input type="checkbox" id="simAnimField"> Animate the radiation field over the timeline
+                        </label>
+                        <div style="font-size:11.5px; color:#8b949e; margin:5px 0 7px;">
+                            Draws the <b>isodose surfaces</b> at each moment of the simulation — watch the field grow as
+                            activity builds. Uses the levels &amp; resolution from <b>Analyze&nbsp;▸&nbsp;Isodose Surfaces</b>.
+                            Build once, then scrub or play to view it, or export it as an animated GIF you can share.
+                        </div>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <label style="font-size:12px;">Frames
+                                <input type="number" id="simAnimFrames" value="12" min="2" max="40" step="1" style="width:52px;">
+                            </label>
+                            <button class="add-layer-btn" id="simAnimBuildBtn" title="Precompute the isodose field at each frame of the timeline (this is the slow step)" onclick="buildFieldAnimation()">Build field animation</button>
+                            <button class="add-layer-btn" id="simAnimGifBtn" title="Render every frame and download an animated GIF" onclick="exportFieldGif()" disabled style="opacity:0.5;">Export animated GIF…</button>
+                        </div>
+                    </div>
                 </div>
             </div>
             </div><!-- /tab-simulate -->
@@ -1016,6 +1034,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script src="gifenc.min.js"></script>
     <script src="src/materials.js"></script>
     <script src="src/isotopes.js"></script>
     <script src="src/physics.js"></script>
@@ -1704,6 +1723,7 @@
         let simResults = null;
         let simPlayTimer = null;
         let simStepIdx = 0;
+        let simFieldFrames = null;   // precomputed isodose surfaces per animation frame
 
         function sceneSources() {
             return Editor.getModel().volumes.filter(v => v.role === 'source' && v.enabled !== false);
@@ -1781,6 +1801,10 @@
             const model = Editor.getModel();
             if (!dosePoints.length) { setStatus('Add a dose point first (Analyze tab)'); return; }
             simStopPlayback();
+            // A fresh run invalidates any previously-built field animation
+            simFieldFrames = null;
+            const gifBtn = document.getElementById('simAnimGifBtn');
+            if (gifBtn) { gifBtn.disabled = true; gifBtn.style.opacity = '0.5'; }
 
             const IN = Geometry.INCH_TO_CM;
             const cfg = {
@@ -1914,6 +1938,15 @@
                     refresh(false);
                 }
             }
+
+            // Radiation-field animation: show the isodose frame nearest this step
+            if (simFieldFrames && simFieldFrames.length) {
+                let best = simFieldFrames[0];
+                for (const f of simFieldFrames) {
+                    if (Math.abs(f.stepIdx - simStepIdx) < Math.abs(best.stepIdx - simStepIdx)) best = f;
+                }
+                Scene.renderIsodoseSurfaces(best.surfaces, best.centers);
+            }
         }
 
         function simPlayPause() {
@@ -1931,6 +1964,156 @@
             if (simPlayTimer) { clearInterval(simPlayTimer); simPlayTimer = null; }
             const btn = document.getElementById('simPlayBtn');
             if (btn) btn.innerHTML = '&#9654;';
+        }
+
+        // ===================================================================
+        // Radiation-field animation: precompute isodose surfaces at each
+        // frame of the timeline (using the sim's per-source activities), then
+        // play them back in 3D and/or export an animated GIF. Self-contained.
+        // ===================================================================
+        function buildFieldAnimation() {
+            if (!simResults) { setStatus('Run a simulation first'); return; }
+            if (!document.getElementById('simAnimField').checked) {
+                setStatus('Check "Animate the radiation field" first'); return;
+            }
+            if (!isodoseLevelData.length) {
+                setStatus('Add at least one isodose level in Analyze ▸ Isodose Surfaces first'); return;
+            }
+            const model = Editor.getModel();
+            const IN = Geometry.INCH_TO_CM;
+            const subdiv = parseInt(document.getElementById('isodoseRes').value) || 2;
+            const maxRange = parseFloat(document.getElementById('isodoseRange').value) * IN;
+            const includeAir = document.getElementById('includeAir').checked;
+            const levels = isodoseLevelData.map(l => ({
+                value_mrem_hr: l.value, color: l.color, label: l.label || (l.value + ' mrem/hr')
+            }));
+            const nFrames = Math.max(2, Math.min(40, parseInt(document.getElementById('simAnimFrames').value) || 12));
+            const nSteps = simResults.times_min.length - 1;
+
+            const sources = model.volumes.filter(v => v.role === 'source' && v.enabled !== false);
+            const savedA = {}; sources.forEach(v => savedA[v.id] = v.activity_Ci);
+            const puddle = model.getVolume('spill-puddle');
+            const savedR = puddle ? puddle.radius : null;
+
+            const btn = document.getElementById('simAnimBuildBtn');
+            btn.disabled = true; btn.textContent = 'Building… 0%';
+            document.getElementById('simAnimGifBtn').disabled = true;
+            simStopPlayback();
+
+            const frames = [];
+            let k = 0;
+            function buildStep() {
+                if (k >= nFrames) { finishBuild(); return; }
+                const stepIdx = Math.round(k * nSteps / (nFrames - 1));
+                const act = simResults.activities[stepIdx];
+                sources.forEach(v => { if (act[v.id] !== undefined) v.activity_Ci = act[v.id]; });
+                if (puddle && simResults.spillRadius_cm) puddle.radius = Math.max(1, simResults.spillRadius_cm[stepIdx]);
+
+                const elements = [], centers = [];
+                for (const v of model.volumes) {
+                    if (v.enabled === false || v.role !== 'source') continue;
+                    const els = v.meshSource(5, 16, 8); if (!els.length) continue;
+                    let cx = 0, cy = 0, cz = 0;
+                    for (const e of els) { cx += e.position.x; cy += e.position.y; cz += e.position.z; }
+                    centers.push({ x: cx / els.length, y: cy / els.length, z: cz / els.length });
+                    elements.push(...els);
+                }
+                let surfaces = [];
+                if (centers.length) {
+                    surfaces = Physics.generateIsodoseSurfaces(
+                        elements, model.getSourceIsotope(), model, centers, levels,
+                        { includeAir: includeAir, subdivisions: subdiv, minDist: 1, maxDist: maxRange, searchSteps: 12 });
+                }
+                frames.push({ stepIdx: stepIdx, tMin: simResults.times_min[stepIdx], surfaces: surfaces, centers: centers, act: act });
+                k++;
+                btn.textContent = 'Building… ' + Math.round(k / nFrames * 100) + '%';
+                setStatus('Building field animation… frame ' + k + ' / ' + nFrames);
+                setTimeout(buildStep, 0);
+            }
+            function finishBuild() {
+                sources.forEach(v => v.activity_Ci = savedA[v.id]);
+                if (puddle && savedR != null) puddle.radius = savedR;
+                simFieldFrames = frames;
+                btn.disabled = false; btn.textContent = 'Rebuild field animation';
+                const gif = document.getElementById('simAnimGifBtn');
+                gif.disabled = false; gif.style.opacity = '1';
+                simScrubTo(simStepIdx);
+                setStatus('Field animation ready (' + frames.length + ' frames) — scrub/play to view, or Export animated GIF.');
+            }
+            setTimeout(buildStep, 30);
+        }
+
+        function drawGifCaption(ctx, W, H, fr, durMin) {
+            const pct = durMin > 0 ? Math.round(fr.tMin / durMin * 100) : 0;
+            const totCi = Object.keys(fr.act).reduce((s, id) => s + (fr.act[id] || 0), 0);
+            const bh = Math.round(H * 0.075) + 30;
+            ctx.save();
+            ctx.fillStyle = 'rgba(13,17,23,0.82)';
+            ctx.fillRect(0, 0, W, bh);
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillStyle = '#58a6ff'; ctx.font = 'bold 12px Segoe UI, Arial'; ctx.textAlign = 'left';
+            ctx.fillText('RADSHIELD · RADIATION FIELD ANIMATION', 12, 18);
+            ctx.fillStyle = '#e6edf3'; ctx.font = 'bold 16px Segoe UI, Arial';
+            ctx.fillText('t = ' + fr.tMin.toFixed(0) + ' min  (' + pct + '%)   ·   active source: ' + totCi.toFixed(2) + ' Ci', 12, 40);
+            ctx.font = '12px Segoe UI, Arial'; ctx.textAlign = 'right'; ctx.fillStyle = '#ffa657';
+            const line = dosePoints.map((dp, j) => dp.name + ': ' + Physics.formatDose(simResults.doses[j][fr.stepIdx])).join('    ');
+            ctx.fillText(line, W - 12, 26);
+            ctx.restore();
+        }
+
+        function exportFieldGif() {
+            if (!simFieldFrames || !simFieldFrames.length) { setStatus('Build the field animation first'); return; }
+            if (!window.gifenc) { setStatus('GIF encoder not available'); return; }
+            const { GIFEncoder, quantize, applyPalette } = window.gifenc;
+            const btn = document.getElementById('simAnimGifBtn');
+            btn.disabled = true; btn.textContent = 'Rendering… 0%';
+            simStopPlayback();
+
+            const srcCanvas = document.querySelector('#viewport canvas');
+            const scale = Math.min(1, 900 / srcCanvas.width);
+            const W = Math.round(srcCanvas.width * scale), H = Math.round(srcCanvas.height * scale);
+            const cnv = document.createElement('canvas'); cnv.width = W; cnv.height = H;
+            const ctx = cnv.getContext('2d');
+            const enc = GIFEncoder();
+            const frames = simFieldFrames;
+            const durMin = simResults.times_min[simResults.times_min.length - 1];
+
+            let k = 0;
+            function renderNext() {
+                if (k >= frames.length) { finishGif(); return; }
+                const fr = frames[k];
+                Scene.renderIsodoseSurfaces(fr.surfaces, fr.centers);
+                dosePoints.forEach((dp, j) => {
+                    dp.lastResult = Physics.formatDose(simResults.doses[j][fr.stepIdx]) + ' @ ' + fr.tMin.toFixed(0) + ' min';
+                });
+                updateDoseMarkers();
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0, W, H);
+                    drawGifCaption(ctx, W, H, fr, durMin);
+                    const data = ctx.getImageData(0, 0, W, H).data;
+                    const pal = quantize(data, 256);
+                    const idx = applyPalette(data, pal);
+                    const delay = (k === frames.length - 1) ? 1400 : 450;
+                    enc.writeFrame(idx, W, H, { palette: pal, delay: delay });
+                    k++;
+                    btn.textContent = 'Rendering… ' + Math.round(k / frames.length * 100) + '%';
+                    setStatus('Rendering animated GIF… frame ' + k + ' / ' + frames.length);
+                    setTimeout(renderNext, 0);
+                };
+                img.src = Scene.snapshot();
+            }
+            function finishGif() {
+                enc.finish();
+                const blob = new Blob([enc.bytes()], { type: 'image/gif' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob); a.download = 'radshield-field-animation.gif'; a.click();
+                URL.revokeObjectURL(a.href);
+                btn.disabled = false; btn.textContent = 'Export animated GIF…';
+                simScrubTo(simStepIdx);
+                setStatus('Animated GIF downloaded (' + frames.length + ' frames).');
+            }
+            setTimeout(renderNext, 30);
         }
 
         // ===================================================================

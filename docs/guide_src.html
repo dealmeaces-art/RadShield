@@ -825,6 +825,41 @@ activity that arrives late); the growing puddle contributes dose but its negligi
 on <i>other</i> sources' rays is not re-traced. Scrubbing the timeline moves the puddle's drawn size —
 run the simulation again (or scrub to t = 0) to reset it.</div>
 
+<h2>10.3&nbsp; Animate the radiation field &amp; export a GIF</h2>
+
+<p>A dose curve tells you how the numbers move. Sometimes you want to <i>see</i> the field itself grow — the
+whole isodose envelope swelling as a demineralizer loads, a tank fills, or a puddle spreads. RadShield can
+animate the isodose surfaces across the timeline and hand you a shareable animated GIF, all offline, right
+inside the program.</p>
+
+<div class="procedure"><div class="ptitle">Procedure — animate the field over time</div>
+<ol>
+    <li>First set up the field you want to watch: on the <span class="ui">Analyze</span> tab, add your
+        <b>Isodose levels</b> (e.g. 100 / 20 / 2 mrem/hr) and pick a <b>resolution</b> and <b>max range</b>.
+        The animation reuses exactly these levels. <b>Low</b> resolution is recommended — every frame is a
+        full isodose computation, so cost multiplies by the frame count.</li>
+    <li>Run your simulation as usual (transfer, discharge, or spill) so the timeline and dose curves exist.</li>
+    <li>In <span class="ui">Simulation Results</span>, check <b>Animate the radiation field over the
+        timeline</b>, set a <b>frame</b> count (12 is a good default), and press
+        <span class="ui">Build field animation</span>. RadShield replays the simulation's per-step activity
+        into the sources and computes the isodose surfaces at each frame (watch the progress in the status bar).</li>
+    <li>Now <b>scrub</b> or press <span class="ui">▶</span>: the field grows and shrinks in the 3D view in step
+        with the dose markers — an empty scene at t = 0 blooming into the full envelope at the end.</li>
+    <li>Press <span class="ui">Export animated GIF…</span> to render every frame — each captioned with the
+        elapsed time, percent complete, active curies, and per-point dose — and download a self-contained
+        <code>radshield-field-animation.gif</code> you can drop into a report or e-mail.</li>
+</ol>
+</div>
+
+<div class="note"><b>Reproducing the demo.</b> This is exactly how the <code>demos/</code> demineralizer
+field-growth animation is made — a 6&prime; concrete cube with a 24&Prime; demineralizer filling to 1.89 Ci
+over 500 minutes. Everything you need ships in the one HTML file; no external tools.</div>
+
+<div class="warn"><b>Cost &amp; freshness.</b> Building the animation is the slow step — it is (frames &times;
+one isodose generation). Keep the resolution Low and the frame count modest for a first pass. Any change to
+the geometry or a fresh <span class="ui">Run Simulation</span> clears the built animation, so build it last,
+after the scene is settled.</div>
+
 <!-- ================= CH 11 ================= -->
 <h1 class="chapter" id="ch11"><span class="cnum">11</span>The Pipe / Hose Builder</h1>
 

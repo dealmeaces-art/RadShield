@@ -3,6 +3,14 @@
 ## What It Is
 A browser-based radiation dose rate calculator replacing MicroShield. Uses point-kernel integration with buildup factors, ray-tracing through 3D geometry, and Three.js visualization. Runs as a single portable HTML file — no installation needed.
 
+## What's New (v0.7 - July 2026) — animated radiation field + in-app GIF export
+Portable file: `RadShield_Portable_v7.html`. The **Simulate** tab can now animate the isodose radiation field across the timeline and export it as an animated GIF — entirely in-browser, no external tools.
+
+- **Radiation field animation** (Simulate ▸ Simulation Results): check **Animate the radiation field over the timeline**, set a frame count, and press **Build field animation**. It precomputes the isodose surfaces at each frame using the sim's per-source activities (`simResults.activities[step]`), so the scrubber/playback now shows the field growing/shrinking as activity builds. Uses the levels & resolution from the Analyze ▸ Isodose panel.
+- **Export animated GIF**: renders every frame (captions baked in — time, %, active Ci, per-dose-point readouts) and downloads a self-contained `.gif`. GIF encoding via **gifenc** (MIT, vendored as `gifenc.min.js`, inlined into the portable like three.min.js). Canvas capture uses `Scene.snapshot()`; the renderer now sets `preserveDrawingBuffer:true` so `toDataURL` is reliable.
+- This makes the demineralizer-style field-growth demo (previously rendered externally with puppeteer+ffmpeg) reproducible by a user with **just the program**.
+- Implementation: `buildFieldAnimation()` / `exportFieldGif()` / `drawGifCaption()` in index.html; `simScrubTo()` renders the nearest field frame; `runSimulation()` invalidates a stale animation. Verified end-to-end headlessly (build → grow → valid GIF89a) against index.html and the inlined portable.
+
 ## What's New (v0.6 - July 2026) — smart feature snapping (Measure & Smart Dimension)
 Portable file: `RadShield_Portable_v6.html`. SolidEdge-style key-point snapping added to the **Measure (M)** and **Smart Dimension (S)** tools (`src/scene.js`).
 

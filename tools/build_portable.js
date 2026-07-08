@@ -19,6 +19,7 @@ function localFileFor(src) {
     if (src.includes('three.min.js')) return 'three.min.js';
     if (src.includes('OrbitControls.js')) return 'OrbitControls.js';
     if (src.includes('TransformControls.js')) return 'TransformControls.js';
+    if (src.includes('gifenc.min.js')) return 'gifenc.min.js';
     if (src.startsWith('src/')) return src;
     return null;
 }
