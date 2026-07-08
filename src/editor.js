@@ -466,8 +466,8 @@ const Editor = (() => {
             translate: 'Move mode: drag the arrows (snap 0.25")',
             rotate: 'Rotate mode: drag the rings (snap 15°)',
             dose: 'Click anywhere to place the dose point',
-            measure: 'Measure: click the first point (on any object or the floor)',
-            dimension: 'Smart Dimension: click an object to edit its dimensions in place'
+            measure: 'Measure: hover to snap to a corner/edge/center, then click two points',
+            dimension: 'Smart Dimension: hover highlights the face; click an object to edit it'
         };
         status(tips[mode] || '');
         updateHelp();
@@ -494,11 +494,14 @@ const Editor = (() => {
             'Click any object surface or the floor to drop the dose point there, then press "Calculate Dose Rate". ' +
             'You can also type coordinates in the Dose Point panel on the left.'],
         measure: ['Measure (M)',
-            'Click a first point, then a second (on object surfaces or the floor). ' +
-            'A label shows the straight-line distance plus the X/Y/Z offsets between the two points. ' +
-            'Click again to start a new measurement. Esc = exit.'],
+            'Hover an object — the cursor snaps to the nearest key point (corner, edge midpoint, ' +
+            'rim quadrant, or face/axis center) and the snapped feature is labelled. Click that point, ' +
+            'then a second one; a dashed preview tracks the second point. The label shows the straight-line ' +
+            'distance plus the X/Y/Z offsets. Example: snap the plug’s Top center, then the floor’s ' +
+            'Bottom center for exact height. Click again for a new measurement. Esc = exit.'],
         dimension: ['Smart Dimension (S)',
-            'Click any object — a popup appears at your cursor with its dimensions (radius, height, width…). ' +
+            'Hover to highlight the object and the specific face under the cursor. Click any object — a popup ' +
+            'appears at your cursor with its dimensions (radius, height, width…). ' +
             'Type new values and they apply instantly (undoable with Ctrl+Z). ' +
             'Click another object to edit that one next. Esc = close.']
     };

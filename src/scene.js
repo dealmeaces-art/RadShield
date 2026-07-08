@@ -19,6 +19,15 @@ const Scene = (() => {
     let pickMeshes = [];             // raycast targets (userData.volumeId set)
     const GROUND_PLANE = { normal: { x: 0, y: 1, z: 0 }, constant: 0 };
 
+    // --- Feature snapping (Measure / Smart Dimension) ---
+    let currentVisList = [];         // vis data of the rendered volumes
+    let snapFeatureCache = null;     // lazily-built world-space key points
+    let hoverGroup = null;           // transient snap glyphs / face highlights
+    let hoveredVolId = null;         // volume currently tinted by hover
+    let currentSnap = null;          // {x,y,z,type} the active snap target
+    let pointerIsDown = false;       // suppress hover while dragging / orbiting
+    const SNAP_TOL = 16;             // px radius to grab a key point
+
     // Material colors
     const COLORS = {
         steel:    0x808080,
@@ -117,6 +126,11 @@ const Scene = (() => {
         }
 
         scene.add(sceneGroup);
+
+        // Feature-snapping data for Measure / Smart Dimension
+        currentVisList = volumesVisData || [];
+        snapFeatureCache = null;
+        clearHover();
 
         // Restore selection highlight + gizmo on the rebuilt groups
         if (selectedId && volGroupById[selectedId]) {
@@ -756,6 +770,7 @@ const Scene = (() => {
         let rightX = 0, rightY = 0;
 
         el.addEventListener('pointerdown', (e) => {
+            pointerIsDown = true;
             if (e.button === 0) {
                 downX = e.clientX; downY = e.clientY;
                 downOnGizmo = !!(transformControls &&
@@ -766,11 +781,21 @@ const Scene = (() => {
         });
 
         el.addEventListener('pointerup', (e) => {
+            pointerIsDown = false;
             if (e.button !== 0 || downOnGizmo) return;
             const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
             if (moved > 5) return;  // was an orbit drag, not a click
             handleClick(e);
         });
+
+        // Feature-snap hover (Measure / Smart Dimension only)
+        el.addEventListener('pointermove', (e) => {
+            if (pointerIsDown) return;   // don't fight an orbit/pan drag
+            if (interactionMode === 'measure' || interactionMode === 'dimension') {
+                updateHover(e);
+            }
+        });
+        el.addEventListener('pointerleave', () => clearHover());
 
         // Right-click menu only when the mouse didn't pan (right-drag = pan)
         el.addEventListener('contextmenu', (e) => {
@@ -871,7 +896,10 @@ const Scene = (() => {
     }
 
     function handleMeasureClick(e) {
-        const pt = pickAnyPoint(e);
+        // Prefer the snapped key point from hover; fall back to a raw pick
+        const pt = currentSnap
+            ? { x: currentSnap.x, y: currentSnap.y, z: currentSnap.z }
+            : pickAnyPoint(e);
         if (!pt) return;
 
         if (!measurePtA) {
@@ -914,6 +942,339 @@ const Scene = (() => {
 
         measurePtA = null;
         if (editorCallbacks.onMeasure) editorCallbacks.onMeasure(a, b);
+    }
+
+    // =======================================================================
+    // Feature snapping (Measure & Smart Dimension) — SolidEdge-style.
+    // On hover we tint the volume, highlight the specific face under the
+    // cursor, and snap to the nearest key point (corner / edge midpoint /
+    // rim quadrant / face or axis center). The snapped world point is what a
+    // Measure/Dimension click consumes, so measurements lock onto real
+    // geometry instead of an arbitrary point in space.
+    // =======================================================================
+
+    // World-space rotation+translation for a vis object, matching the volume's
+    // own transform (three.js Euler order 'XYZ' — same as geometry.js).
+    function visMatrix(vis) {
+        const r = vis.rotation || { x: 0, y: 0, z: 0 };
+        const M = new THREE.Matrix4();
+        M.makeRotationFromEuler(new THREE.Euler(
+            THREE.MathUtils.degToRad(r.x || 0),
+            THREE.MathUtils.degToRad(r.y || 0),
+            THREE.MathUtils.degToRad(r.z || 0), 'XYZ'));
+        M.setPosition(vis.position.x, vis.position.y, vis.position.z);
+        return M;
+    }
+
+    // Key points for one volume, in WORLD coordinates.
+    // prio: 0 = corner/vertex, 1 = edge/quadrant, 2 = center/face (lower wins).
+    function featuresFor(vis) {
+        const M = visMatrix(vis);
+        const out = [];
+        const add = (x, y, z, type, label, prio) => out.push({
+            p: new THREE.Vector3(x, y, z).applyMatrix4(M),
+            volId: vis.id, type, label, prio
+        });
+        switch (vis.type) {
+            case 'box': {
+                const hw = vis.width / 2, hd = vis.depth / 2, h = vis.height;
+                for (const sx of [-hw, hw])
+                    for (const sy of [0, h])
+                        for (const sz of [-hd, hd]) add(sx, sy, sz, 'vertex', 'Corner', 0);
+                for (const sy of [0, h]) for (const sz of [-hd, hd]) add(0, sy, sz, 'edge', 'Edge midpoint', 1);
+                for (const sx of [-hw, hw]) for (const sz of [-hd, hd]) add(sx, h / 2, sz, 'edge', 'Edge midpoint', 1);
+                for (const sx of [-hw, hw]) for (const sy of [0, h]) add(sx, sy, 0, 'edge', 'Edge midpoint', 1);
+                add(0, h / 2, 0, 'center', 'Center', 2);
+                add(hw, h / 2, 0, 'face', 'Face center', 2);
+                add(-hw, h / 2, 0, 'face', 'Face center', 2);
+                add(0, h / 2, hd, 'face', 'Face center', 2);
+                add(0, h / 2, -hd, 'face', 'Face center', 2);
+                add(0, 0, 0, 'face', 'Bottom center', 2);
+                add(0, h, 0, 'face', 'Top center', 2);
+                break;
+            }
+            case 'cylinder': {
+                const r = vis.radius, h = vis.height;
+                add(0, 0, 0, 'face', 'Bottom center', 2);
+                add(0, h, 0, 'face', 'Top center', 2);
+                add(0, h / 2, 0, 'center', 'Center', 2);
+                for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]]) {
+                    add(dx, 0, dz, 'edge', 'Rim quadrant', 1);
+                    add(dx, h, dz, 'edge', 'Rim quadrant', 1);
+                }
+                break;
+            }
+            case 'disk': {
+                const r = vis.radius, th = vis.thickness || vis.height;
+                add(0, 0, 0, 'face', 'Bottom center', 2);
+                add(0, th, 0, 'face', 'Top center', 2);
+                add(0, th / 2, 0, 'center', 'Center', 2);
+                for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]]) {
+                    add(dx, 0, dz, 'edge', 'Rim quadrant', 1);
+                    add(dx, th, dz, 'edge', 'Rim quadrant', 1);
+                }
+                break;
+            }
+            case 'annulus': {
+                const ri = vis.innerRadius, ro = vis.outerRadius, h = vis.height;
+                add(0, 0, 0, 'center', 'Axis (bottom)', 2);
+                add(0, h, 0, 'center', 'Axis (top)', 2);
+                for (const rr of [ri, ro])
+                    for (const [dx, dz] of [[rr, 0], [-rr, 0], [0, rr], [0, -rr]]) {
+                        add(dx, 0, dz, 'edge', 'Rim quadrant', 1);
+                        add(dx, h, dz, 'edge', 'Rim quadrant', 1);
+                    }
+                break;
+            }
+            case 'sphere': {
+                const r = vis.radius;
+                add(0, r, 0, 'center', 'Center', 2);
+                add(0, 0, 0, 'vertex', 'Bottom point', 0);
+                add(0, 2 * r, 0, 'vertex', 'Top point', 0);
+                for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]])
+                    add(dx, r, dz, 'edge', 'Equator quadrant', 1);
+                break;
+            }
+        }
+        return out;
+    }
+
+    function getSnapFeatures() {
+        if (snapFeatureCache) return snapFeatureCache;
+        snapFeatureCache = [];
+        for (const vis of currentVisList) {
+            if (vis.visible === false) continue;
+            for (const f of featuresFor(vis)) snapFeatureCache.push(f);
+        }
+        return snapFeatureCache;
+    }
+
+    // World point -> pixel coords within the canvas; behind=true if off-camera.
+    function toScreen(v3, rect) {
+        const p = v3.clone().project(camera);
+        return {
+            x: (p.x * 0.5 + 0.5) * rect.width,
+            y: (-p.y * 0.5 + 0.5) * rect.height,
+            behind: p.z > 1
+        };
+    }
+
+    const GLYPH_COLOR = {
+        vertex: 0xffd54f, edge: 0x00e5ff,
+        center: 0xff5cf0, face: 0xff5cf0, onface: 0xffffff
+    };
+
+    function makeGlyph(type, p) {
+        let geom;
+        if (type === 'vertex') geom = new THREE.BoxGeometry(3.2, 3.2, 3.2);
+        else if (type === 'edge') geom = new THREE.OctahedronGeometry(2.4);
+        else if (type === 'onface') geom = new THREE.SphereGeometry(1.7, 10, 10);
+        else geom = new THREE.TorusGeometry(2.3, 0.7, 8, 18);
+        const m = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
+            color: GLYPH_COLOR[type] || 0xffffff, depthTest: false,
+            transparent: true, opacity: 0.95
+        }));
+        m.position.copy(p);
+        m.renderOrder = 21;
+        return m;
+    }
+
+    function addSnapLabel(text, p) {
+        const label = makeTextSprite(text, {
+            fontSize: 12, color: '#e6edf3', worldHeight: 4.5,
+            background: 'rgba(13,17,23,0.8)'
+        });
+        label.position.set(p.x, p.y + 7, p.z);
+        label.renderOrder = 22;
+        hoverGroup.add(label);
+    }
+
+    function addRimLoop(group, r, y) {
+        const pts = [];
+        for (let i = 0; i <= 48; i++) {
+            const a = (i / 48) * Math.PI * 2;
+            pts.push(new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r));
+        }
+        const loop = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(pts),
+            new THREE.LineBasicMaterial({
+                color: 0x00e5ff, depthTest: false, transparent: true, opacity: 0.9
+            }));
+        loop.renderOrder = 12;
+        group.add(loop);
+    }
+
+    // Translucent highlight of the specific face/surface under the cursor.
+    function addFaceHighlight(vis, hit) {
+        if (!hit || !hit.face) return;
+        const nWorld = hit.face.normal.clone()
+            .applyMatrix3(new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld))
+            .normalize();
+        const r = vis.rotation || { x: 0, y: 0, z: 0 };
+        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+            THREE.MathUtils.degToRad(r.x || 0),
+            THREE.MathUtils.degToRad(r.y || 0),
+            THREE.MathUtils.degToRad(r.z || 0), 'XYZ'));
+        const nLoc = nWorld.clone().applyQuaternion(q.clone().invert());
+        const ax = Math.abs(nLoc.x), ay = Math.abs(nLoc.y), az = Math.abs(nLoc.z);
+
+        const local = new THREE.Group();
+        local.matrixAutoUpdate = false;
+        local.matrix.copy(visMatrix(vis));
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0x00e5ff, transparent: true, opacity: 0.22,
+            side: THREE.DoubleSide, depthTest: false, depthWrite: false
+        });
+
+        if (vis.type === 'box') {
+            const hw = vis.width / 2, hd = vis.depth / 2, h = vis.height;
+            let mesh;
+            if (ax >= ay && ax >= az) {
+                mesh = new THREE.Mesh(new THREE.PlaneGeometry(vis.depth, h), mat);
+                mesh.rotation.y = Math.sign(nLoc.x) * Math.PI / 2;
+                mesh.position.set(Math.sign(nLoc.x) * hw, h / 2, 0);
+            } else if (ay >= ax && ay >= az) {
+                mesh = new THREE.Mesh(new THREE.PlaneGeometry(vis.width, vis.depth), mat);
+                mesh.rotation.x = -Math.sign(nLoc.y) * Math.PI / 2;
+                mesh.position.set(0, nLoc.y > 0 ? h : 0, 0);
+            } else {
+                mesh = new THREE.Mesh(new THREE.PlaneGeometry(vis.width, h), mat);
+                if (nLoc.z < 0) mesh.rotation.y = Math.PI;
+                mesh.position.set(0, h / 2, Math.sign(nLoc.z) * hd);
+            }
+            mesh.renderOrder = 12;
+            local.add(mesh);
+        } else if (vis.type === 'cylinder' || vis.type === 'disk') {
+            const rr = vis.radius;
+            const h = (vis.type === 'disk') ? (vis.thickness || vis.height) : vis.height;
+            if (ay >= ax && ay >= az) {
+                const mesh = new THREE.Mesh(new THREE.CircleGeometry(rr, 40), mat);
+                mesh.rotation.x = -Math.PI / 2;
+                mesh.position.y = nLoc.y > 0 ? h : 0;
+                mesh.renderOrder = 12;
+                local.add(mesh);
+            } else {
+                addRimLoop(local, rr, 0);
+                addRimLoop(local, rr, h);
+            }
+        } else if (vis.type === 'annulus') {
+            const ri = vis.innerRadius, ro = vis.outerRadius, h = vis.height;
+            if (ay >= ax && ay >= az) {
+                const mesh = new THREE.Mesh(new THREE.RingGeometry(ri, ro, 40), mat);
+                mesh.rotation.x = -Math.PI / 2;
+                mesh.position.y = nLoc.y > 0 ? h : 0;
+                mesh.renderOrder = 12;
+                local.add(mesh);
+            } else {
+                addRimLoop(local, ro, 0); addRimLoop(local, ro, h);
+                addRimLoop(local, ri, 0); addRimLoop(local, ri, h);
+            }
+        }
+        // sphere: tint only, no planar face to highlight
+        if (local.children.length) hoverGroup.add(local);
+    }
+
+    function applyHoverTint(id) {
+        if (id === selectedId) return;    // don't override the selection color
+        const grp = volGroupById[id];
+        if (!grp) return;
+        grp.traverse(child => {
+            if (child.isMesh && child.material && child.material.emissive) {
+                child.material.emissive.setHex(0x00393f);
+                child.material.emissiveIntensity = 1.0;
+            }
+        });
+        hoveredVolId = id;
+    }
+
+    function pickGroundPoint(rc) {
+        const plane = new THREE.Plane(
+            new THREE.Vector3(GROUND_PLANE.normal.x, GROUND_PLANE.normal.y, GROUND_PLANE.normal.z),
+            GROUND_PLANE.constant);
+        const target = new THREE.Vector3();
+        return rc.ray.intersectPlane(plane, target)
+            ? { x: target.x, y: target.y, z: target.z } : null;
+    }
+
+    function updateHover(e) {
+        clearHover();
+        const rect = renderer.domElement.getBoundingClientRect();
+        const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const rc = rayFromEvent(e);
+        const hits = pickMeshes.length ? rc.intersectObjects(pickMeshes, false) : [];
+        const hit = hits.length ? hits[0] : null;
+        const hoverId = hit ? hit.object.userData.volumeId : null;
+
+        // nearest key point within pixel tolerance (priority, then distance)
+        let best = null;
+        for (const f of getSnapFeatures()) {
+            const s = toScreen(f.p, rect);
+            if (s.behind) continue;
+            const d = Math.hypot(s.x - cursor.x, s.y - cursor.y);
+            if (d > SNAP_TOL) continue;
+            const score = f.prio * 10000 + d;
+            if (!best || score < best.score) best = { f, score };
+        }
+
+        hoverGroup = new THREE.Group();
+        scene.add(hoverGroup);
+
+        if (hoverId) {
+            applyHoverTint(hoverId);
+            const vis = currentVisList.find(v => v.id === hoverId);
+            if (vis) addFaceHighlight(vis, hit);
+        }
+
+        if (best) {
+            const p = best.f.p;
+            currentSnap = { x: p.x, y: p.y, z: p.z, type: best.f.label };
+            hoverGroup.add(makeGlyph(best.f.type, p));
+            addSnapLabel(best.f.label, p);
+        } else if (hit) {
+            const p = hit.point;
+            currentSnap = { x: p.x, y: p.y, z: p.z, type: 'On surface' };
+            hoverGroup.add(makeGlyph('onface', p));
+            addSnapLabel('On surface', p);
+        } else {
+            const g = pickGroundPoint(rc);
+            if (g) {
+                currentSnap = { x: g.x, y: g.y, z: g.z, type: 'On floor' };
+                hoverGroup.add(makeGlyph('onface', new THREE.Vector3(g.x, g.y, g.z)));
+            } else {
+                currentSnap = null;
+            }
+        }
+
+        // rubber-band preview from the 1st measure point to the live snap
+        if (interactionMode === 'measure' && measurePtA && currentSnap) {
+            const lg = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(measurePtA.x, measurePtA.y, measurePtA.z),
+                new THREE.Vector3(currentSnap.x, currentSnap.y, currentSnap.z)
+            ]);
+            const ln = new THREE.Line(lg, new THREE.LineDashedMaterial({
+                color: 0x2ee6a8, depthTest: false, dashSize: 3, gapSize: 2,
+                transparent: true, opacity: 0.85
+            }));
+            ln.computeLineDistances();
+            ln.renderOrder = 14;
+            hoverGroup.add(ln);
+        }
+    }
+
+    function clearHover() {
+        if (hoveredVolId) { applySelectionVisuals(); hoveredVolId = null; }
+        if (hoverGroup) {
+            scene.remove(hoverGroup);
+            hoverGroup.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (child.material.map) child.material.map.dispose();
+                    child.material.dispose();
+                }
+            });
+            hoverGroup = null;
+        }
+        currentSnap = null;
     }
 
     function commitGizmoTransform() {
@@ -965,6 +1326,7 @@ const Scene = (() => {
     // --- Interaction mode ---
     function setMode(mode) {
         if (interactionMode === 'measure' && mode !== 'measure') clearMeasure();
+        clearHover();
         interactionMode = mode;
         if (renderer) {
             renderer.domElement.style.cursor =
@@ -995,6 +1357,7 @@ const Scene = (() => {
         setMode,
         getMode,
         clearMeasure,
+        getSnap: () => currentSnap,
         COLORS
     };
 

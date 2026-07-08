@@ -3,8 +3,18 @@
 ## What It Is
 A browser-based radiation dose rate calculator replacing MicroShield. Uses point-kernel integration with buildup factors, ray-tracing through 3D geometry, and Three.js visualization. Runs as a single portable HTML file — no installation needed.
 
-## What's New (v0.6 - July 2026) — analysis & simulation workflows
-Same portable file (`RadShield_Portable_v5.html`). Sidebar reorganized into **Model | Analyze | Simulate** tabs.
+## What's New (v0.6 - July 2026) — smart feature snapping (Measure & Smart Dimension)
+Portable file: `RadShield_Portable_v6.html`. SolidEdge-style key-point snapping added to the **Measure (M)** and **Smart Dimension (S)** tools (`src/scene.js`).
+
+- **Hover highlight**: in Measure/Dimension mode, the object under the cursor tints and the *specific face* under the cursor gets a translucent cyan overlay — box faces (planar quad), cylinder/disk/annulus caps (disk/ring), and rim loops for curved sides. Spheres tint only.
+- **Key-point snapping**: the cursor locks to the nearest real geometric feature within a 16px screen tolerance, chosen by priority (corner/vertex → edge midpoint/rim quadrant → face/axis center) then pixel distance. A color-coded glyph (amber cube = vertex, cyan octahedron = edge, magenta ring = center/face) marks the point with a text label ("Top center", "Corner", "Rim quadrant", "Axis (top)"…). Falls back to "On surface" then "On floor".
+- **Feature sets** are generated per volume type in world coords via `featuresFor(vis)` using `visMatrix(vis)` (a THREE.Matrix4 from position + Euler 'XYZ' — matches geometry.js exactly). Box: 8 corners, 12 edge midpoints, 6 face centers + top/bottom/center. Cylinder/disk: bottom/top/center + 4 rim quadrants each cap. Annulus: axis top/bottom + inner & outer rim quadrants. Sphere: center + poles + 4 equator quadrants. Cache invalidated on every `renderScene` (so live edits stay correct).
+- **Measure** clicks now consume the snapped world point (`currentSnap`) instead of a raw raycast hit, with a **dashed rubber-band preview** from the 1st point to the live snap. So "top of plug to bottom of floor" = snap plug **Top center**, then floor **Bottom center** → exact height.
+- Hover wired via `pointermove` (suppressed while a mouse button is down so it never fights an orbit/pan drag); cleared on `pointerleave` and on leaving the mode. New read-only `Scene.getSnap()` exposes the active snap (used by the smoke test).
+- Verified: 9-check headless-Edge smoke test (snap fires, grabs real key points, two-click measurement runs clean, dimension hover works, snap clears on mode exit) against **both** index.html and the inlined portable. All node regression suites still green.
+
+## What's New (v0.5 - July 2026) — analysis & simulation workflows
+Portable file `RadShield_Portable_v5.html`. Sidebar reorganized into **Model | Analyze | Simulate** tabs.
 
 - **Named dose points** (Analyze): any number of named locations, all calculated at once (results table for >1 point), per-point 3D marker labels, pick-in-3D per row, saved with the scene (old single-point files still load). Editor hands picked locations to the app via the `onDosePick` hook.
 - **Time simulation** (Simulate, `src/sim.js`): transfers of activity between sources (or in/out of the scene) over a duration with selectable curves, optional carrier ("via" hose holding a transit inventory while flowing), optional per-isotope decay, and spill scenarios (auto-created "spill-puddle" disk grows as √(V/πd), per-step dose since geometry changes). Engine precomputes a dose-per-curie matrix (dose is linear in activity) so timelines/playback are instant. Outputs per dose point: dose-vs-time chart (canvas renderer `drawChart`), peak, **integrated dose** (trapezoid, mrem); playback scrubber animates markers + puddle in 3D. Note: transferred activity adopts destination's isotope; decay applied to post-transfer inventory.
