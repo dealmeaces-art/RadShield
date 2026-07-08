@@ -166,6 +166,171 @@ function layerOf(layers, mat) {
         close(layerOf(layers, 'steel'), 1, 1e-6));
 }
 
+// ---------------------------------------------------------------------------
+// 6. BoxVolume: containment, slab ray intersection, rotation
+// ---------------------------------------------------------------------------
+{
+    const m = new Geometry.SceneModel();
+    const box = new Geometry.BoxVolume({
+        id: 'b', role: 'shield', materialKey: 'steel',
+        position: { x: 0, y: 0, z: 0 },
+        dimensions: { width: 20, depth: 40, height: 10 }
+    });
+    m.addVolume(box);
+
+    check('box: contains center', box.containsPoint(0, 5, 0));
+    check('box: outside +X face', !box.containsPoint(10.1, 5, 0));
+    check('box: outside top face', !box.containsPoint(0, 10.1, 0));
+
+    const alongX = m.rayTrace({ x: -50, y: 5, z: 0 }, { x: 50, y: 5, z: 0 });
+    check('box: X ray steel path = width (20)',
+        close(layerOf(alongX, 'steel'), 20, 1e-6), JSON.stringify(alongX));
+
+    const alongZ = m.rayTrace({ x: 0, y: 5, z: -100 }, { x: 0, y: 5, z: 100 });
+    check('box: Z ray steel path = depth (40)',
+        close(layerOf(alongZ, 'steel'), 40, 1e-6));
+
+    const alongY = m.rayTrace({ x: 0, y: -20, z: 0 }, { x: 0, y: 30, z: 0 });
+    check('box: Y ray steel path = height (10)',
+        close(layerOf(alongY, 'steel'), 10, 1e-6));
+
+    check('box: volume = w*d*h', close(box.getVolume_cm3(), 8000, 1e-9));
+
+    // Rotate 90 about Y: width (X) and depth (Z) swap in the world
+    box.setRotation({ x: 0, y: 90, z: 0 });
+    const rotX = m.rayTrace({ x: -100, y: 5, z: 0 }, { x: 100, y: 5, z: 0 });
+    check('box ry=90: X ray now sees depth (40)',
+        close(layerOf(rotX, 'steel'), 40, 1e-6), JSON.stringify(rotX));
+}
+
+// ---------------------------------------------------------------------------
+// 7. Box source meshing: elements inside, activity conserved (rotated)
+// ---------------------------------------------------------------------------
+{
+    const src = new Geometry.BoxVolume({
+        id: 'bs', role: 'source', materialKey: 'water',
+        position: { x: 10, y: -5, z: 20 },
+        rotation: { x: 20, y: 40, z: 10 },
+        dimensions: { width: 30, depth: 12, height: 8 },
+        isotopeKey: 'Co-60', activity_Ci: 4.5
+    });
+    const elems = src.meshSource(4, 6, 5);
+    const total = elems.reduce((s, e) => s + e.activity_Ci, 0);
+    const allInside = elems.every(e =>
+        src.containsPoint(e.position.x, e.position.y, e.position.z));
+    check('box source mesh: all elements inside', allInside);
+    check('box source mesh: activity conserved', close(total, 4.5, 1e-9), `total=${total}`);
+}
+
+// ---------------------------------------------------------------------------
+// 8. SphereVolume: containment, chord lengths, meshing
+// ---------------------------------------------------------------------------
+{
+    const m = new Geometry.SceneModel();
+    const sph = new Geometry.SphereVolume({
+        id: 's', role: 'shield', materialKey: 'lead',
+        position: { x: 0, y: 0, z: 0 },   // bottom point at origin, center (0,10,0)
+        dimensions: { radius: 10 }
+    });
+    m.addVolume(sph);
+
+    check('sphere: contains center', sph.containsPoint(0, 10, 0));
+    check('sphere: contains near bottom', sph.containsPoint(0, 0.5, 0));
+    check('sphere: outside top', !sph.containsPoint(0, 20.1, 0));
+    check('sphere: outside side', !sph.containsPoint(10.1, 10, 0));
+
+    const diam = m.rayTrace({ x: -50, y: 10, z: 0 }, { x: 50, y: 10, z: 0 });
+    check('sphere: ray through center, lead path = 2R',
+        close(layerOf(diam, 'lead'), 20, 1e-6), JSON.stringify(diam));
+
+    const chord = m.rayTrace({ x: -50, y: 15, z: 0 }, { x: 50, y: 15, z: 0 });
+    check('sphere: offset chord = 2*sqrt(R^2-25)',
+        close(layerOf(chord, 'lead'), 2 * Math.sqrt(75), 1e-6));
+
+    check('sphere: volume = 4/3 pi R^3',
+        close(sph.getVolume_cm3(), (4 / 3) * Math.PI * 1000, 1e-6));
+
+    const src = new Geometry.SphereVolume({
+        id: 'ss', role: 'source', materialKey: 'water',
+        position: { x: 5, y: 8, z: -3 },
+        rotation: { x: 15, y: 30, z: 45 },
+        dimensions: { radius: 6 },
+        isotopeKey: 'Co-60', activity_Ci: 2.25
+    });
+    const elems = src.meshSource(4, 8, 6);
+    const total = elems.reduce((s, e) => s + e.activity_Ci, 0);
+    const allInside = elems.every(e =>
+        src.containsPoint(e.position.x, e.position.y, e.position.z));
+    check('sphere source mesh: all elements inside', allInside);
+    check('sphere source mesh: activity conserved',
+        close(total, 2.25, 1e-9), `total=${total}`);
+}
+
+// ---------------------------------------------------------------------------
+// 9. enabled flag: disabled volumes are invisible to the physics
+// ---------------------------------------------------------------------------
+{
+    const m = new Geometry.SceneModel();
+    m.addVolume(new Geometry.CylinderVolume({
+        id: 'shield', role: 'shield', materialKey: 'lead',
+        position: { x: 0, y: 0, z: 0 },
+        dimensions: { radius: 10, height: 100 },
+        enabled: false
+    }));
+    m.addVolume(new Geometry.CylinderVolume({
+        id: 'src', role: 'source', materialKey: 'water',
+        position: { x: 100, y: 0, z: 0 },
+        dimensions: { radius: 5, height: 10 },
+        isotopeKey: 'Co-60', activity_Ci: 7, enabled: false
+    }));
+
+    const layers = m.rayTrace({ x: -50, y: 50, z: 0 }, { x: 50, y: 50, z: 0 });
+    check('disabled shield: ray sees only air',
+        layers.every(l => l.materialKey === 'air'), JSON.stringify(layers));
+    check('disabled shield: getMaterialAt = air',
+        m.getMaterialAt(0, 50, 0) === 'air');
+    check('disabled source: zero total activity', m.getTotalActivity() === 0);
+    check('disabled source: no mesh elements', m.meshAllSources(3, 6, 6).length === 0);
+
+    // Round-trip keeps the flag; re-enabling restores the physics
+    const restored = Geometry.sceneFromJSON(JSON.parse(JSON.stringify(m.toJSON())));
+    check('enabled flag survives round-trip',
+        restored.getVolume('shield').enabled === false &&
+        restored.getVolume('src').enabled === false);
+    restored.getVolume('shield').enabled = true;
+    const layers2 = restored.rayTrace({ x: -50, y: 50, z: 0 }, { x: 50, y: 50, z: 0 });
+    check('re-enabled shield: lead path = 2R',
+        close(layerOf(layers2, 'lead'), 20, 1e-6));
+}
+
+// ---------------------------------------------------------------------------
+// 10. Box/sphere JSON round-trip: identical ray-trace results
+// ---------------------------------------------------------------------------
+{
+    const m = new Geometry.SceneModel();
+    m.addVolume(new Geometry.BoxVolume({
+        id: 'b', role: 'shield', materialKey: 'concrete',
+        position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 30, z: 0 },
+        dimensions: { width: 25, depth: 15, height: 40 }
+    }));
+    m.addVolume(new Geometry.SphereVolume({
+        id: 's', role: 'source', materialKey: 'water',
+        position: { x: 40, y: 10, z: -10 },
+        dimensions: { radius: 8 },
+        isotopeKey: 'Cs-137', activity_Ci: 3
+    }));
+    const restored = Geometry.sceneFromJSON(JSON.parse(JSON.stringify(m.toJSON())));
+    check('box/sphere round-trip: volume count',
+        restored.volumes.length === 2);
+    const rays = [
+        [{ x: -80, y: 20, z: 0 }, { x: 80, y: 20, z: 0 }],
+        [{ x: 40, y: -30, z: -10 }, { x: 40, y: 60, z: -10 }]
+    ];
+    const same = rays.every(([a, b]) =>
+        JSON.stringify(m.rayTrace(a, b)) === JSON.stringify(restored.rayTrace(a, b)));
+    check('box/sphere round-trip: identical ray-traces', same);
+}
+
 console.log(failures === 0
     ? '\nAll geometry checks passed.'
     : `\n${failures} geometry checks FAILED.`);

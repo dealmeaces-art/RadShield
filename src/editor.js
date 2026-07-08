@@ -14,7 +14,7 @@ const Editor = (() => {
     const MAX_UNDO = 50;
 
     let model = null;              // SceneModel document
-    let hooks = {};                // { refresh(frame), setStatus(msg) }
+    let hooks = {};                // { refresh(frame), setStatus(msg), onDosePick(pt) }
     let selection = null;          // volume id or null
     let undoStack = [];
     let redoStack = [];
@@ -32,8 +32,9 @@ const Editor = (() => {
         hooks = hooksArg || {};
 
         Scene.initEditorControls({
-            onSelect: (id) => select(id),
+            onSelect: (id, screen) => handleViewportPick(id, screen),
             onPickPoint: (pt) => placeDosePoint(pt),
+            onMeasure: (a, b) => reportMeasure(a, b),
             onContextMenu: (id, screen, pt) => showContextMenu(id, screen, pt),
             onTransformStart: () => pushUndo(),
             onTransformEnd: (id, posCm, rotDeg) => {
@@ -54,6 +55,7 @@ const Editor = (() => {
 
         renderOutliner();
         renderProperties();
+        updateHelp();
     }
 
     function status(msg) { if (hooks.setStatus) hooks.setStatus(msg); }
@@ -103,6 +105,33 @@ const Editor = (() => {
     // -----------------------------------------------------------------------
     // Selection
     // -----------------------------------------------------------------------
+    // Every pick (viewport click or outliner click) routes through here so
+    // an in-progress relationship (mate) can capture it.
+    function handleViewportPick(id, screen) {
+        if (mateState) { handleMateClick(id); return; }
+        select(id);
+        if (Scene.getMode() === 'dimension') {
+            if (id && screen) showDimEditor(id, screen);
+            else if (!id) hideDimEditor();
+        }
+    }
+
+    function reportMeasure(a, b) {
+        if (!b) {
+            status('Measure: point 1 set at (' + fmtPt(a) + ') — click the second point');
+            return;
+        }
+        const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        status('Distance: ' + (dist / IN).toFixed(2) + '" (' + (dist / 30.48).toFixed(2) +
+            ' ft) from (' + fmtPt(a) + ') to (' + fmtPt(b) + ') — click to start a new measurement');
+    }
+
+    function fmtPt(p) {
+        return (p.x / IN).toFixed(1) + '", ' + (p.y / IN).toFixed(1) + '", ' +
+               (p.z / IN).toFixed(1) + '"';
+    }
+
     function select(id) {
         selection = id;
         Scene.setSelected(id);
@@ -149,6 +178,23 @@ const Editor = (() => {
                 ...base,
                 dimensions: { radius: 6 * IN, thickness: 1 * IN }
             });
+        } else if (kind === 'box') {
+            vol = new Geometry.BoxVolume({
+                ...base,
+                dimensions: { width: 12 * IN, depth: 12 * IN, height: 12 * IN }
+            });
+        } else if (kind === 'plate') {
+            // A "plane" / wall: thin box, easy to rotate into any orientation
+            vol = new Geometry.BoxVolume({
+                ...base,
+                label: (role === 'source' ? 'Source ' : 'Plate ') + insertCounter,
+                dimensions: { width: 24 * IN, depth: 24 * IN, height: 0.5 * IN }
+            });
+        } else if (kind === 'sphere') {
+            vol = new Geometry.SphereVolume({
+                ...base,
+                dimensions: { radius: 6 * IN }
+            });
         } else {
             vol = new Geometry.CylinderVolume({
                 ...base,
@@ -158,7 +204,8 @@ const Editor = (() => {
         model.addVolume(vol);
         refreshAll(false);
         select(vol.id);
-        status('Added ' + displayName(vol));
+        status('Added ' + displayName(vol) +
+            ' — size it in the Selected Object panel, or press S and click it (Smart Dimension)');
     }
 
     function deleteVolume(id) {
@@ -214,6 +261,19 @@ const Editor = (() => {
         refreshAll(false);
     }
 
+    // Include/exclude a volume from the dose calculation (independent of
+    // visibility). Excluded volumes draw ghosted and contribute nothing.
+    function toggleEnabled(id) {
+        const vol = model.getVolume(id);
+        if (!vol) return;
+        pushUndo();
+        vol.enabled = vol.enabled === false;
+        refreshAll(false);
+        status(displayName(vol) + (vol.enabled
+            ? ' included in calculation'
+            : ' EXCLUDED from calculation (ghosted)'));
+    }
+
     // -----------------------------------------------------------------------
     // Align operations (one-shot "mates"): move the selected volume into a
     // fixed relationship with a target volume. All modes make the axes
@@ -229,7 +289,10 @@ const Editor = (() => {
         { key: 'rot',        label: 'Match rotation only' }
     ];
 
-    function volHeight(v) { return v.height || v.thickness || 0; }
+    function volHeight(v) {
+        if (v._type && v._type() === 'sphere') return v.radius * 2;
+        return v.height || v.thickness || 0;
+    }
 
     function alignVolumes(moverId, targetId, mode) {
         const mover = model.getVolume(moverId);
@@ -257,6 +320,68 @@ const Editor = (() => {
         select(moverId);
         const label = (ALIGN_MODES.find(m => m.key === mode) || {}).label || mode;
         status(label + ': ' + displayName(mover) + ' → ' + displayName(target));
+    }
+
+    // -----------------------------------------------------------------------
+    // Relationship workflow (SolidEdge-style toolbar mates)
+    // Click a relationship button, then click the object to move, then the
+    // target. If something is already selected it becomes the mover and only
+    // the target click is needed. Esc cancels.
+    // -----------------------------------------------------------------------
+    let mateState = null;   // { mode, moverId } | null
+
+    function mateLabel(key) {
+        return (ALIGN_MODES.find(m => m.key === key) || { label: key }).label;
+    }
+
+    function startMate(modeKey) {
+        if (mateState && mateState.mode === modeKey) {   // toggle off
+            cancelMate('Relationship cancelled');
+            return;
+        }
+        const mover = selection ? model.getVolume(selection) : null;
+        mateState = { mode: modeKey, moverId: mover ? selection : null };
+        updateMateButtons();
+        setMode('select');
+        status(mover
+            ? mateLabel(modeKey) + ': moving "' + displayName(mover) + '" — click the TARGET object'
+            : mateLabel(modeKey) + ': click the object to MOVE');
+        updateHelp();
+    }
+
+    function cancelMate(msg) {
+        mateState = null;
+        updateMateButtons();
+        if (msg) status(msg);
+        updateHelp();
+    }
+
+    function handleMateClick(id) {
+        if (!id) { cancelMate('Relationship cancelled (clicked empty space)'); return; }
+        if (!mateState.moverId) {
+            mateState.moverId = id;
+            select(id);
+            status(mateLabel(mateState.mode) + ': moving "' +
+                displayName(model.getVolume(id)) + '" — now click the TARGET object');
+            updateHelp();
+            return;
+        }
+        if (id === mateState.moverId) {
+            status('Target must be a different object — click another object, or Esc to cancel');
+            return;
+        }
+        const st = mateState;
+        mateState = null;
+        updateMateButtons();
+        alignVolumes(st.moverId, id, st.mode);
+        updateHelp();
+    }
+
+    function updateMateButtons() {
+        document.querySelectorAll('[data-mate]').forEach(btn => {
+            btn.classList.toggle('active',
+                !!mateState && btn.dataset.mate === mateState.mode);
+        });
     }
 
     // Replace tank-template volumes, keep everything the user added
@@ -314,15 +439,11 @@ const Editor = (() => {
     }
 
     // -----------------------------------------------------------------------
-    // Dose point placement (viewport pick)
+    // Dose point placement (viewport pick) — the app owns the dose point
+    // list; it is handed the picked location via the onDosePick hook.
     // -----------------------------------------------------------------------
     function placeDosePoint(pt) {
-        const set = (id, v) => {
-            const el = document.getElementById(id);
-            if (el) el.value = (v / IN).toFixed(1);
-        };
-        set('doseX', pt.x); set('doseY', pt.y); set('doseZ', pt.z);
-        Scene.setDosePoint(pt.x, pt.y, pt.z, null);
+        if (hooks.onDosePick) hooks.onDosePick(pt);
         setMode('select');
         status('Dose point placed at (' + (pt.x / IN).toFixed(1) + '", ' +
             (pt.y / IN).toFixed(1) + '", ' + (pt.z / IN).toFixed(1) + '")');
@@ -331,10 +452,11 @@ const Editor = (() => {
     // -----------------------------------------------------------------------
     // Interaction mode + toolbar
     // -----------------------------------------------------------------------
-    const MODES = ['select', 'translate', 'rotate', 'dose'];
+    const MODES = ['select', 'translate', 'rotate', 'dose', 'measure', 'dimension'];
 
     function setMode(mode) {
         Scene.setMode(mode);
+        if (mode !== 'dimension') hideDimEditor();
         for (const m of MODES) {
             const btn = document.getElementById('mode-' + m);
             if (btn) btn.classList.toggle('active', m === mode);
@@ -343,9 +465,68 @@ const Editor = (() => {
             select: 'Select mode: click a volume',
             translate: 'Move mode: drag the arrows (snap 0.25")',
             rotate: 'Rotate mode: drag the rings (snap 15°)',
-            dose: 'Click anywhere to place the dose point'
+            dose: 'Click anywhere to place the dose point',
+            measure: 'Measure: click the first point (on any object or the floor)',
+            dimension: 'Smart Dimension: click an object to edit its dimensions in place'
         };
         status(tips[mode] || '');
+        updateHelp();
+    }
+
+    // -----------------------------------------------------------------------
+    // Contextual "How to" bar (bottom of the viewport): always explains the
+    // active tool; during a relationship it walks through the steps.
+    // -----------------------------------------------------------------------
+    const MODE_HELP = {
+        select: ['Select (V)',
+            'Click an object to select it, then edit it in the Selected Object panel on the left. ' +
+            'Left-drag orbits the camera, right-drag pans, scroll zooms. ' +
+            'Right-click an object for actions (duplicate, material, align…); right-click empty space to add a shape there. ' +
+            'Del = delete, Ctrl+D = duplicate, Ctrl+Z = undo.'],
+        translate: ['Move (G)',
+            'Drag the red/green/blue arrows to move the selected object (¼" snap; green = up). ' +
+            'Click a different object to move that one instead. ' +
+            'For exact coordinates use the X/Y/Z fields in the Selected Object panel. Esc = back to Select.'],
+        rotate: ['Rotate (R)',
+            'Drag the colored rings to rotate the selected object (15° snap). ' +
+            'For exact angles use the Rot X/Y/Z fields in the Selected Object panel. Esc = back to Select.'],
+        dose: ['Dose Point (D)',
+            'Click any object surface or the floor to drop the dose point there, then press "Calculate Dose Rate". ' +
+            'You can also type coordinates in the Dose Point panel on the left.'],
+        measure: ['Measure (M)',
+            'Click a first point, then a second (on object surfaces or the floor). ' +
+            'A label shows the straight-line distance plus the X/Y/Z offsets between the two points. ' +
+            'Click again to start a new measurement. Esc = exit.'],
+        dimension: ['Smart Dimension (S)',
+            'Click any object — a popup appears at your cursor with its dimensions (radius, height, width…). ' +
+            'Type new values and they apply instantly (undoable with Ctrl+Z). ' +
+            'Click another object to edit that one next. Esc = close.']
+    };
+
+    const MATE_DESC = {
+        concentric: 'Concentric moves it onto the target’s axis (keeps its position along the axis).',
+        ontop: 'On Top sets its bottom face flush on the target’s top face, centered on the axis.',
+        under: 'Beneath sets it flush against the target’s bottom face, centered on the axis.',
+        flush: 'Flush puts both bottom faces on the same plane (keeps the sideways offset).',
+        center: 'Center In centers it inside the target.',
+        rot: 'Parallel matches its orientation to the target without moving it.'
+    };
+
+    function updateHelp() {
+        const el = document.getElementById('helpbar');
+        if (!el) return;
+        let title, text;
+        if (mateState) {
+            title = 'Relationship: ' + mateLabel(mateState.mode);
+            text = (mateState.moverId
+                ? 'Step 2 of 2 — click the TARGET object (in the 3D view or the Scene Objects list). '
+                : 'Step 1 of 2 — click the object you want to MOVE. ')
+                + (MATE_DESC[mateState.mode] || '') + '  Esc cancels.';
+        } else {
+            const h = MODE_HELP[Scene.getMode()] || ['', ''];
+            title = h[0]; text = h[1];
+        }
+        el.innerHTML = '<span class="help-title">' + title + '</span><span class="help-text">' + text + '</span>';
     }
 
     function bindModeToolbar() {
@@ -377,7 +558,8 @@ const Editor = (() => {
             }
             if (e.key === 'Delete' && selection) { deleteVolume(selection); return; }
             if (e.key === 'Escape') {
-                hideContextMenu(); hidePipeBuilder();
+                hideContextMenu(); hidePipeBuilder(); hideDimEditor();
+                if (mateState) { cancelMate('Relationship cancelled'); return; }
                 select(null); setMode('select');
                 return;
             }
@@ -387,6 +569,8 @@ const Editor = (() => {
                 case 'g': setMode('translate'); break;
                 case 'r': setMode('rotate'); break;
                 case 'd': setMode('dose'); break;
+                case 'm': setMode('measure'); break;
+                case 's': setMode('dimension'); break;
             }
         });
     }
@@ -413,7 +597,9 @@ const Editor = (() => {
 
         for (const vol of model.volumes) {
             const row = document.createElement('div');
-            row.className = 'outliner-item' + (vol.id === selection ? ' selected' : '');
+            row.className = 'outliner-item'
+                + (vol.id === selection ? ' selected' : '')
+                + (vol.enabled === false ? ' calc-off' : '');
 
             const dot = document.createElement('span');
             dot.className = 'outliner-dot';
@@ -429,17 +615,25 @@ const Editor = (() => {
             badge.textContent = vol.role === 'source' ? 'SRC'
                 : (vol.role === 'container' ? 'TANK' : 'SHLD');
 
+            const calc = document.createElement('input');
+            calc.type = 'checkbox';
+            calc.className = 'outliner-calc';
+            calc.checked = vol.enabled !== false;
+            calc.title = 'Include in dose calculation (unchecked = ghosted, ignored by physics)';
+            calc.addEventListener('click', (e) => { e.stopPropagation(); toggleEnabled(vol.id); });
+
             const eye = document.createElement('button');
             eye.className = 'outliner-eye' + (vol.visible ? '' : ' off');
             eye.textContent = vol.visible ? '\u{1F441}' : '✖';
-            eye.title = 'Show/hide in 3D view only (still included in calculation)';
+            eye.title = 'Show/hide in 3D view only (does not affect the calculation)';
             eye.addEventListener('click', (e) => { e.stopPropagation(); toggleVisible(vol.id); });
 
             row.appendChild(dot);
             row.appendChild(name);
             row.appendChild(badge);
+            row.appendChild(calc);
             row.appendChild(eye);
-            row.addEventListener('click', () => select(vol.id));
+            row.addEventListener('click', () => handleViewportPick(vol.id, null));
             list.appendChild(row);
         }
     }
@@ -452,6 +646,28 @@ const Editor = (() => {
         return (Math.round(v * 1000) / 1000).toString();
     }
     function fmtDeg(d) { return (Math.round(d * 100) / 100).toString(); }
+
+    // Dimension form rows for a volume type (shared by the properties panel
+    // and the Smart Dimension floating editor)
+    function dimRowsHTML(vol, row, num) {
+        const type = vol._type();
+        if (type === 'annulus') {
+            return row('Inner Radius', num('innerRadius', fmtIn(vol.innerRadius), 0.25), 'in')
+                 + row('Outer Radius', num('outerRadius', fmtIn(vol.outerRadius), 0.25), 'in')
+                 + row('Height', num('height', fmtIn(vol.height), 0.5), 'in');
+        } else if (type === 'disk') {
+            return row('Radius', num('radius', fmtIn(vol.radius), 0.25), 'in')
+                 + row('Thickness', num('thickness', fmtIn(vol.thickness), 0.25), 'in');
+        } else if (type === 'box') {
+            return row('Width (X)', num('width', fmtIn(vol.width), 0.25), 'in')
+                 + row('Height (Y)', num('height', fmtIn(vol.height), 0.25), 'in')
+                 + row('Depth (Z)', num('depth', fmtIn(vol.depth), 0.25), 'in');
+        } else if (type === 'sphere') {
+            return row('Radius', num('radius', fmtIn(vol.radius), 0.25), 'in');
+        }
+        return row('Radius', num('radius', fmtIn(vol.radius), 0.25), 'in')
+             + row('Height', num('height', fmtIn(vol.height), 0.5), 'in');
+    }
 
     function renderProperties() {
         const panel = document.getElementById('propPanel');
@@ -477,28 +693,19 @@ const Editor = (() => {
         const num = (field, val, step) =>
             `<input type="number" value="${val}" step="${step}" onchange="Editor.applyProp('${field}', this.value)">`;
 
-        let dims = '';
-        const type = vol._type();
-        if (type === 'annulus') {
-            dims = row('Inner Radius', num('innerRadius', fmtIn(vol.innerRadius), 0.25), 'in')
-                 + row('Outer Radius', num('outerRadius', fmtIn(vol.outerRadius), 0.25), 'in')
-                 + row('Height', num('height', fmtIn(vol.height), 0.5), 'in');
-        } else if (type === 'disk') {
-            dims = row('Radius', num('radius', fmtIn(vol.radius), 0.25), 'in')
-                 + row('Thickness', num('thickness', fmtIn(vol.thickness), 0.25), 'in');
-        } else {
-            dims = row('Radius', num('radius', fmtIn(vol.radius), 0.25), 'in')
-                 + row('Height', num('height', fmtIn(vol.height), 0.5), 'in');
-        }
+        const dims = dimRowsHTML(vol, row, num);
 
         body.innerHTML =
             row('Name', `<input type="text" value="${(vol.label || '').replace(/"/g, '&quot;')}" onchange="Editor.applyProp('label', this.value)">`)
-            + row('Role', `<select onchange="Editor.applyProp('role', this.value)">
+            + row('Role', `<select title="Source = emits radiation (gets isotope + activity). Shield / Container = attenuates only."
+                onchange="Editor.applyProp('role', this.value)">
                 <option value="shield" ${vol.role === 'shield' ? 'selected' : ''}>Shield</option>
                 <option value="source" ${vol.role === 'source' ? 'selected' : ''}>Source</option>
                 <option value="container" ${vol.role === 'container' ? 'selected' : ''}>Container</option>
               </select>`)
             + row('Material', `<select onchange="Editor.applyProp('materialKey', this.value)">${matOpts}</select>`)
+            + row('In Calculation', `<input type="checkbox" style="flex:0" ${vol.enabled !== false ? 'checked' : ''}
+                onchange="Editor.toggleEnabledSelected()">`)
             + (vol.role === 'source'
                 ? row('Isotope', `<select onchange="Editor.applyProp('isotopeKey', this.value)">${isoOpts}</select>`)
                 + row('Activity', num('activity_Ci', vol.activity_Ci || 0, 0.1), 'Ci')
@@ -512,7 +719,9 @@ const Editor = (() => {
             + row('Rot Z', num('rotZ', fmtDeg(vol.rotation.z), 15), 'deg')
             + '<div class="divider"></div>'
             + dims
-            + row('Priority', `<input type="number" value="${vol.priority}" step="5" onchange="Editor.applyProp('priority', this.value)">`,
+            + row('Priority', `<input type="number" value="${vol.priority}" step="5"
+                title="When shapes overlap, the highest-priority shape decides the material at that point (e.g. a plug inside a lid opening needs higher priority than the lid)"
+                onchange="Editor.applyProp('priority', this.value)">`,
                   'overlap')
             + `<div class="prop-actions">
                  <button onclick="Editor.duplicateSelected()">Duplicate</button>
@@ -550,12 +759,49 @@ const Editor = (() => {
             case 'thickness': vol.thickness = numVal * IN; vol.height = numVal * IN; break;
             case 'innerRadius': vol.innerRadius = numVal * IN; break;
             case 'outerRadius': vol.outerRadius = numVal * IN; break;
+            case 'width': vol.width = numVal * IN; break;
+            case 'depth': vol.depth = numVal * IN; break;
         }
         refreshAll(false);
     }
 
     function deleteSelected() { if (selection) deleteVolume(selection); }
     function duplicateSelected() { if (selection) duplicateVolume(selection); }
+
+    // -----------------------------------------------------------------------
+    // Smart Dimension floating editor: appears next to the clicked object,
+    // edits its dimensions live (Enter/typing applies, Esc or X closes)
+    // -----------------------------------------------------------------------
+    let dimEl = null;
+
+    function hideDimEditor() {
+        if (dimEl) { dimEl.remove(); dimEl = null; }
+    }
+
+    function showDimEditor(id, screen) {
+        hideDimEditor();
+        const vol = model.getVolume(id);
+        if (!vol) return;
+
+        const row = (label, inner, unit) =>
+            `<div class="form-row"><label>${label}</label>${inner}<span class="unit">${unit || ''}</span></div>`;
+        const num = (field, val, step) =>
+            `<input type="number" value="${val}" step="${step}" onchange="Editor.applyProp('${field}', this.value)">`;
+
+        dimEl = document.createElement('div');
+        dimEl.className = 'dim-editor';
+        dimEl.innerHTML =
+            `<div class="dim-editor-header">
+                <span>${(displayName(vol) || '').replace(/</g, '&lt;')}</span>
+                <button class="dim-editor-close" onclick="Editor.hideDimEditor()">&times;</button>
+             </div>`
+            + dimRowsHTML(vol, row, num);
+        document.body.appendChild(dimEl);
+
+        const mw = dimEl.offsetWidth, mh = dimEl.offsetHeight;
+        dimEl.style.left = Math.min(screen.x + 14, window.innerWidth - mw - 8) + 'px';
+        dimEl.style.top = Math.min(screen.y + 14, window.innerHeight - mh - 8) + 'px';
+    }
 
     // -----------------------------------------------------------------------
     // Context menu
@@ -600,6 +846,9 @@ const Editor = (() => {
             ctxMenuEl.appendChild(menuHeader(displayName(vol)));
             ctxMenuEl.appendChild(menuItem('Duplicate  (Ctrl+D)', () => duplicateVolume(id)));
             ctxMenuEl.appendChild(menuItem('Delete  (Del)', () => deleteVolume(id), 'danger'));
+            ctxMenuEl.appendChild(menuItem(
+                vol.enabled === false ? 'Include in calculation' : 'Exclude from calculation',
+                () => toggleEnabled(id)));
             ctxMenuEl.appendChild(menuDivider());
             if (vol.role !== 'source') {
                 ctxMenuEl.appendChild(menuItem('Make Source (radioactive)', () => setRole(id, 'source')));
@@ -625,10 +874,14 @@ const Editor = (() => {
             }
         } else {
             ctxMenuEl.appendChild(menuHeader('Add at this point'));
+            ctxMenuEl.appendChild(menuItem('+ Box / cube (shield)', () => addVolume('box', 'shield', pt)));
+            ctxMenuEl.appendChild(menuItem('+ Plate / wall (shield)', () => addVolume('plate', 'shield', pt)));
             ctxMenuEl.appendChild(menuItem('+ Cylinder (shield)', () => addVolume('cylinder', 'shield', pt)));
-            ctxMenuEl.appendChild(menuItem('+ Disk / plate (shield)', () => addVolume('disk', 'shield', pt)));
+            ctxMenuEl.appendChild(menuItem('+ Disk (shield)', () => addVolume('disk', 'shield', pt)));
             ctxMenuEl.appendChild(menuItem('+ Annulus / pipe (shield)', () => addVolume('annulus', 'shield', pt)));
+            ctxMenuEl.appendChild(menuItem('+ Sphere (shield)', () => addVolume('sphere', 'shield', pt)));
             ctxMenuEl.appendChild(menuItem('+ Source cylinder', () => addVolume('cylinder', 'source', pt)));
+            ctxMenuEl.appendChild(menuItem('+ Source sphere', () => addVolume('sphere', 'source', pt)));
             ctxMenuEl.appendChild(menuDivider());
             if (pt) {
                 ctxMenuEl.appendChild(menuItem('Place dose point here', () => placeDosePoint(pt)));
@@ -835,6 +1088,9 @@ const Editor = (() => {
         deleteSelected,
         duplicateSelected,
         applyProp,
+        toggleEnabledSelected: () => { if (selection) toggleEnabled(selection); },
+        startMate,
+        hideDimEditor,
         applyTankTemplate,
         newScene,
         saveToFile,

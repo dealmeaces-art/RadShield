@@ -52,6 +52,9 @@ const Geometry = (() => {
             this.label = config.label || '';
             // Display-only: hidden volumes still participate in the physics
             this.visible = config.visible !== false;
+            // Calculation flag: disabled volumes are drawn ghosted and are
+            // excluded from ray-tracing, source meshing, and totals
+            this.enabled = config.enabled !== false;
             this.rotation = config.rotation
                 ? { x: config.rotation.x || 0, y: config.rotation.y || 0, z: config.rotation.z || 0 }
                 : { x: 0, y: 0, z: 0 };
@@ -145,6 +148,7 @@ const Geometry = (() => {
                 priority: this.priority,
                 label: this.label,
                 visible: this.visible,
+                enabled: this.enabled,
                 isSource: this.role === 'source',
                 activity_Ci: this.activity_Ci || 0,
                 isotopeKey: this.isotopeKey || ''
@@ -162,7 +166,8 @@ const Geometry = (() => {
                 rotation: { ...this.rotation },
                 priority: this.priority,
                 label: this.label,
-                visible: this.visible
+                visible: this.visible,
+                enabled: this.enabled
             };
             if (this.role === 'source') {
                 j.isotopeKey = this.isotopeKey;
@@ -254,7 +259,8 @@ const Geometry = (() => {
                                 rm * Math.cos(theta), zm, rm * Math.sin(theta)
                             ),
                             activity_Ci: this.activity_Ci * (vol / totalVol),
-                            volume_cm3: vol
+                            volume_cm3: vol,
+                            isotopeKey: this.isotopeKey
                         });
                     }
                 }
@@ -392,6 +398,183 @@ const Geometry = (() => {
     }
 
     // ===================================================================
+    // BoxVolume - Rectangular solid (axis-aligned in its local frame)
+    // Local frame: bottom-center at origin; width along X, depth along Z,
+    // height along +Y. Covers cubes, slabs, plates, walls and "planes"
+    // (a plane is just a thin box).
+    // ===================================================================
+    class BoxVolume extends Volume {
+        constructor(config) {
+            super(config);
+            this.width = config.dimensions.width;    // X extent
+            this.depth = config.dimensions.depth;    // Z extent
+            this.height = config.dimensions.height;  // Y extent
+        }
+
+        containsPoint(x, y, z) {
+            const p = this.worldToLocal(x, y, z);
+            return Math.abs(p.x) <= this.width / 2 &&
+                   Math.abs(p.z) <= this.depth / 2 &&
+                   p.y >= 0 && p.y <= this.height;
+        }
+
+        rayIntersect(ox, oy, oz, nx, ny, nz) {
+            const o = this.worldToLocal(ox, oy, oz);
+            const n = this.worldDirToLocal(nx, ny, nz);
+
+            // Slab method in the local frame
+            let tmin = -Infinity, tmax = Infinity;
+            const slabs = [
+                [o.x, n.x, -this.width / 2, this.width / 2],
+                [o.y, n.y, 0, this.height],
+                [o.z, n.z, -this.depth / 2, this.depth / 2]
+            ];
+            for (const [op, np, lo, hi] of slabs) {
+                if (Math.abs(np) < 1e-12) {
+                    if (op < lo || op > hi) return [];
+                } else {
+                    let t1 = (lo - op) / np;
+                    let t2 = (hi - op) / np;
+                    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+                    if (t1 > tmin) tmin = t1;
+                    if (t2 < tmax) tmax = t2;
+                    if (tmin > tmax) return [];
+                }
+            }
+            return [tmin, tmax];
+        }
+
+        meshSource(nr, ntheta, nz) {
+            if (this.role !== 'source' || !this.activity_Ci) return [];
+            // Reuse the cylindrical density knobs as a grid: the angular
+            // count drives X/Z, the axial count drives Y.
+            const nx = ntheta || 8, ny = nz || 10, nzz = ntheta || 8;
+            const W = this.width, D = this.depth, H = this.height;
+            const dx = W / nx, dy = H / ny, dz = D / nzz;
+            const elemVol = dx * dy * dz;
+            const totalVol = W * D * H;
+
+            const elements = [];
+            for (let ix = 0; ix < nx; ix++) {
+                const lx = -W / 2 + (ix + 0.5) * dx;
+                for (let iy = 0; iy < ny; iy++) {
+                    const ly = (iy + 0.5) * dy;
+                    for (let iz = 0; iz < nzz; iz++) {
+                        const lz = -D / 2 + (iz + 0.5) * dz;
+                        elements.push({
+                            position: this.localToWorld(lx, ly, lz),
+                            activity_Ci: this.activity_Ci * (elemVol / totalVol),
+                            volume_cm3: elemVol,
+                            isotopeKey: this.isotopeKey
+                        });
+                    }
+                }
+            }
+            return elements;
+        }
+
+        getVolume_cm3() { return this.width * this.depth * this.height; }
+
+        getVisData() {
+            return {
+                ...super.getVisData(),
+                type: 'box',
+                width: this.width,
+                depth: this.depth,
+                height: this.height
+            };
+        }
+
+        _type() { return 'box'; }
+        _dims() { return { width: this.width, depth: this.depth, height: this.height }; }
+    }
+
+    // ===================================================================
+    // SphereVolume - Solid sphere
+    // Local frame: bottom point at origin, center at (0, radius, 0), so
+    // position keeps the same "bottom center" meaning as other volumes.
+    // ===================================================================
+    class SphereVolume extends Volume {
+        constructor(config) {
+            super(config);
+            this.radius = config.dimensions.radius;
+        }
+
+        containsPoint(x, y, z) {
+            const p = this.worldToLocal(x, y, z);
+            const dy = p.y - this.radius;
+            return p.x * p.x + dy * dy + p.z * p.z <= this.radius * this.radius;
+        }
+
+        rayIntersect(ox, oy, oz, nx, ny, nz) {
+            const o = this.worldToLocal(ox, oy, oz);
+            const n = this.worldDirToLocal(nx, ny, nz);
+            const cy = o.y - this.radius;  // relative to sphere center
+
+            const b = 2 * (o.x * n.x + cy * n.y + o.z * n.z);
+            const c = o.x * o.x + cy * cy + o.z * o.z - this.radius * this.radius;
+            const disc = b * b - 4 * c;    // a = 1 (unit direction)
+            if (disc < 0) return [];
+            const sd = Math.sqrt(disc);
+            return [(-b - sd) / 2, (-b + sd) / 2];
+        }
+
+        meshSource(nr, ntheta, nz) {
+            if (this.role !== 'source' || !this.activity_Ci) return [];
+            nr = nr || 5; ntheta = ntheta || 8;
+            const nphi = nz || 10;
+            const R = this.radius;
+            const totalVol = (4 / 3) * Math.PI * R * R * R;
+
+            const elements = [];
+            const dr = R / nr;
+            const dtheta = (2 * Math.PI) / ntheta;
+            const dcos = 2 / nphi;  // equal cos(phi) bands = equal solid angle
+
+            for (let ir = 0; ir < nr; ir++) {
+                const ri = ir * dr, ro = (ir + 1) * dr;
+                const rm = (ri + ro) / 2;
+                const shellVol = (ro * ro * ro - ri * ri * ri) / 3;
+                for (let ip = 0; ip < nphi; ip++) {
+                    const cos1 = 1 - ip * dcos, cos2 = 1 - (ip + 1) * dcos;
+                    const cosm = (cos1 + cos2) / 2;
+                    const sinm = Math.sqrt(Math.max(0, 1 - cosm * cosm));
+                    for (let it = 0; it < ntheta; it++) {
+                        const theta = (it + 0.5) * dtheta;
+                        const vol = shellVol * (cos1 - cos2) * dtheta;
+                        elements.push({
+                            position: this.localToWorld(
+                                rm * sinm * Math.cos(theta),
+                                R + rm * cosm,
+                                rm * sinm * Math.sin(theta)
+                            ),
+                            activity_Ci: this.activity_Ci * (vol / totalVol),
+                            volume_cm3: vol,
+                            isotopeKey: this.isotopeKey
+                        });
+                    }
+                }
+            }
+            return elements;
+        }
+
+        getVolume_cm3() {
+            return (4 / 3) * Math.PI * this.radius ** 3;
+        }
+
+        getVisData() {
+            return {
+                ...super.getVisData(),
+                type: 'sphere',
+                radius: this.radius
+            };
+        }
+
+        _type() { return 'sphere'; }
+        _dims() { return { radius: this.radius }; }
+    }
+
+    // ===================================================================
     // SceneModel - Container for all volumes in the scene
     // Provides ray-tracing, source meshing, and material detection
     // ===================================================================
@@ -421,6 +604,7 @@ const Geometry = (() => {
             let bestMaterial = 'air';
             let bestPriority = -1;
             for (const vol of this.volumes) {
+                if (vol.enabled === false) continue;
                 if (vol.priority > bestPriority && vol.containsPoint(x, y, z)) {
                     bestMaterial = vol.materialKey;
                     bestPriority = vol.priority;
@@ -450,6 +634,7 @@ const Geometry = (() => {
             allT.add(rayLen);
 
             for (const vol of this.volumes) {
+                if (vol.enabled === false) continue;
                 const hits = vol.rayIntersect(fromPos.x, fromPos.y, fromPos.z, nx, ny, nz);
                 for (const t of hits) {
                     if (t > 1e-6 && t < rayLen - 1e-6) {
@@ -492,6 +677,7 @@ const Geometry = (() => {
         meshAllSources(nr, ntheta, nz) {
             const allElements = [];
             for (const vol of this.volumes) {
+                if (vol.enabled === false) continue;
                 if (vol.role === 'source') {
                     const elements = vol.meshSource(nr, ntheta, nz);
                     allElements.push(...elements);
@@ -506,6 +692,7 @@ const Geometry = (() => {
         // ---------------------------------------------------------------
         getSourceIsotope() {
             for (const vol of this.volumes) {
+                if (vol.enabled === false) continue;
                 if (vol.role === 'source' && vol.isotopeKey) {
                     return vol.isotopeKey;
                 }
@@ -519,6 +706,7 @@ const Geometry = (() => {
         getTotalActivity() {
             let total = 0;
             for (const vol of this.volumes) {
+                if (vol.enabled === false) continue;
                 if (vol.role === 'source') {
                     total += vol.activity_Ci || 0;
                 }
@@ -544,10 +732,21 @@ const Geometry = (() => {
 
             for (const vol of this.volumes) {
                 const vd = vol.getVisData();
-                const r = vd.radius || vd.outerRadius || 0;
-                const h = vd.height || vd.thickness || 0;
-                const c = vol.localToWorld(0, h / 2, 0);
-                const rad = Math.sqrt(r * r + (h / 2) * (h / 2));
+                let cy, rad;
+                if (vd.type === 'box') {
+                    cy = vd.height / 2;
+                    rad = Math.sqrt(
+                        (vd.width / 2) ** 2 + (vd.height / 2) ** 2 + (vd.depth / 2) ** 2);
+                } else if (vd.type === 'sphere') {
+                    cy = vd.radius;
+                    rad = vd.radius;
+                } else {
+                    const r = vd.radius || vd.outerRadius || 0;
+                    const h = vd.height || vd.thickness || 0;
+                    cy = h / 2;
+                    rad = Math.sqrt(r * r + (h / 2) * (h / 2));
+                }
+                const c = vol.localToWorld(0, cy, 0);
 
                 minX = Math.min(minX, c.x - rad);
                 maxX = Math.max(maxX, c.x + rad);
@@ -585,6 +784,7 @@ const Geometry = (() => {
             priority: j.priority,
             label: j.label,
             visible: j.visible,
+            enabled: j.enabled,
             isotopeKey: j.isotopeKey,
             activity_Ci: j.activity_Ci,
             dimensions: j.dimensions
@@ -593,6 +793,8 @@ const Geometry = (() => {
             case 'cylinder': return new CylinderVolume(config);
             case 'annulus':  return new AnnulusVolume(config);
             case 'disk':     return new DiskVolume(config);
+            case 'box':      return new BoxVolume(config);
+            case 'sphere':   return new SphereVolume(config);
             default: throw new Error(`Unknown volume type: ${j.type}`);
         }
     }
@@ -769,6 +971,8 @@ const Geometry = (() => {
         CylinderVolume,
         AnnulusVolume,
         DiskVolume,
+        BoxVolume,
+        SphereVolume,
         SceneModel,
         createTankPreset,
         volumeFromJSON,

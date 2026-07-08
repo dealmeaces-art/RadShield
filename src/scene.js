@@ -8,8 +8,6 @@ const Scene = (() => {
     let scene, camera, renderer, controls;
     let container;
     let sceneGroup = null;
-    let dosePointMesh = null;
-    let dosePointLabel = null;
 
     // --- Editor state ---
     let transformControls = null;
@@ -148,7 +146,11 @@ const Scene = (() => {
     function renderVolume(group, vol) {
         const isSource = vol.isSource;
         const baseColor = isSource ? COLORS.source : (COLORS[vol.materialKey] || 0x888888);
-        const opacity = isSource ? 0.5 : (vol.role === 'container' ? 0.35 : 0.3);
+        // Volumes excluded from the calculation draw as faint ghosts
+        const ghost = vol.enabled === false;
+        const opacity = ghost ? 0.06
+            : (isSource ? 0.5 : (vol.role === 'container' ? 0.35 : 0.3));
+        const wireOpacity = ghost ? 0.15 : 0.5;
         const metalness = (vol.materialKey === 'steel' || vol.materialKey === 'lead') ? 0.7 : 0.1;
 
         // Per-volume group: children are placed in the volume's LOCAL frame
@@ -195,11 +197,65 @@ const Scene = (() => {
             const wireMat = new THREE.LineBasicMaterial({
                 color: baseColor,
                 transparent: true,
-                opacity: 0.5
+                opacity: wireOpacity
             });
             const wireframe = new THREE.LineSegments(wireGeom, wireMat);
             wireframe.position.set(0, h / 2, 0);
             volGroup.add(wireframe);
+
+        } else if (vol.type === 'box') {
+            const w = vol.width, h = vol.height, d = vol.depth;
+            geom = new THREE.BoxGeometry(w, h, d);
+
+            const mat = new THREE.MeshPhysicalMaterial({
+                color: baseColor,
+                transparent: true,
+                opacity: opacity,
+                roughness: 0.4,
+                metalness: metalness,
+                side: THREE.DoubleSide
+            });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(0, h / 2, 0);
+            volGroup.add(mesh);
+
+            const wireGeom = new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d));
+            const wireMat = new THREE.LineBasicMaterial({
+                color: baseColor, transparent: true, opacity: wireOpacity
+            });
+            const wireframe = new THREE.LineSegments(wireGeom, wireMat);
+            wireframe.position.set(0, h / 2, 0);
+            volGroup.add(wireframe);
+
+        } else if (vol.type === 'sphere') {
+            const r = vol.radius;
+            geom = new THREE.SphereGeometry(r, 32, 20);
+
+            const mat = new THREE.MeshPhysicalMaterial({
+                color: baseColor,
+                transparent: true,
+                opacity: opacity,
+                roughness: 0.4,
+                metalness: metalness,
+                side: THREE.DoubleSide
+            });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(0, r, 0);
+            volGroup.add(mesh);
+
+            // Equator + meridian outline circles instead of edge wireframe
+            const circGeom = new THREE.EdgesGeometry(
+                new THREE.CircleGeometry(r, 48), 1);
+            const circMat = new THREE.LineBasicMaterial({
+                color: baseColor, transparent: true, opacity: wireOpacity
+            });
+            const eq = new THREE.LineSegments(circGeom, circMat);
+            eq.rotation.x = -Math.PI / 2;
+            eq.position.y = r;
+            volGroup.add(eq);
+            const mer = new THREE.LineSegments(circGeom.clone(), circMat.clone());
+            mer.position.y = r;
+            volGroup.add(mer);
 
         } else if (vol.type === 'annulus') {
             const h = vol.height;
@@ -226,7 +282,7 @@ const Scene = (() => {
                 new THREE.CylinderGeometry(vol.outerRadius, vol.outerRadius, h, 32)
             );
             const wireMat = new THREE.LineBasicMaterial({
-                color: baseColor, transparent: true, opacity: 0.5
+                color: baseColor, transparent: true, opacity: wireOpacity
             });
             const wireframe = new THREE.LineSegments(wireGeom, wireMat);
             wireframe.position.set(0, h / 2, 0);
@@ -235,14 +291,18 @@ const Scene = (() => {
 
         // Label
         if (vol.label) {
-            const h = vol.height || vol.thickness || 0;
-            const r = vol.outerRadius || vol.radius || 10;
-            const labelSprite = makeTextSprite(vol.label, {
+            const h = vol.height || vol.thickness ||
+                (vol.type === 'sphere' ? vol.radius * 2 : 0);
+            const r = vol.type === 'box'
+                ? Math.max(vol.width, vol.depth) / 2
+                : (vol.outerRadius || vol.radius || 10);
+            const labelSprite = makeTextSprite(
+                vol.label + (ghost ? ' (excluded)' : ''), {
                 fontSize: 14,
-                color: isSource ? '#FF8F00' : '#ffffff'
+                color: ghost ? '#666c76' : (isSource ? '#FF8F00' : '#ffffff'),
+                worldHeight: 9
             });
             labelSprite.position.set(r + 12, h / 2, 0);
-            labelSprite.scale.set(60, 25, 1);
             volGroup.add(labelSprite);
         }
 
@@ -293,57 +353,142 @@ const Scene = (() => {
     // -----------------------------------------------------------------------
     // Create a text sprite
     // -----------------------------------------------------------------------
+    // Multiline text sprite. The canvas is sized to the text and the sprite
+    // scale preserves the aspect ratio, so nothing is clipped or stretched.
+    // params.worldHeight = world units (cm) per text line (default 8).
     function makeTextSprite(message, params) {
         const fontSize = params.fontSize || 14;
+        const font = 'bold ' + (fontSize * 3) + 'px Arial';
+        const lines = String(message).split('\n');
+        const lineH = fontSize * 3 * 1.3;
+        const pad = 12;
+
         const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = 512;
-        canvas.height = 128;
-        ctx.font = (fontSize * 3) + 'px Arial';
-        ctx.fillStyle = params.color || '#ffffff';
+        let ctx = canvas.getContext('2d');
+        ctx.font = font;
+        const textW = Math.max(...lines.map(l => ctx.measureText(l).width), 1);
+        canvas.width = Math.ceil(textW + pad * 2);
+        canvas.height = Math.ceil(lineH * lines.length + pad);
+
+        // Resizing the canvas resets the context state
+        ctx = canvas.getContext('2d');
+        ctx.font = font;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(message, 256, 64);
+        if (params.background) {
+            ctx.fillStyle = params.background;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.fillStyle = params.color || '#ffffff';
+        lines.forEach((l, i) => {
+            ctx.fillText(l, canvas.width / 2, pad / 2 + lineH * (i + 0.5));
+        });
+
         const texture = new THREE.CanvasTexture(canvas);
         texture.needsUpdate = true;
-        return new THREE.Sprite(new THREE.SpriteMaterial({
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
             map: texture, transparent: true, depthTest: false
         }));
+        const H = (params.worldHeight || 8) * lines.length;
+        sprite.scale.set(H * canvas.width / canvas.height, H, 1);
+        return sprite;
     }
 
     // -----------------------------------------------------------------------
-    // Set dose point marker
+    // Dose point markers (any number of named points)
+    // points: [{x, y, z, name?, text?}] in cm
     // -----------------------------------------------------------------------
+    let doseGroup = null;
+
+    function setDosePoints(points) {
+        if (doseGroup) {
+            scene.remove(doseGroup);
+            doseGroup.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (child.material.map) child.material.map.dispose();
+                    child.material.dispose();
+                }
+            });
+            doseGroup = null;
+        }
+        if (!points || !points.length) return;
+
+        doseGroup = new THREE.Group();
+        for (const p of points) {
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(2, 16, 16),
+                new THREE.MeshBasicMaterial({ color: COLORS.dosePoint })
+            );
+            mesh.position.set(p.x, p.y, p.z);
+            mesh.add(new THREE.Mesh(
+                new THREE.SphereGeometry(4, 16, 16),
+                new THREE.MeshBasicMaterial({
+                    color: COLORS.dosePoint, transparent: true, opacity: 0.3
+                })
+            ));
+            doseGroup.add(mesh);
+
+            const lines = [];
+            if (p.name) lines.push(p.name);
+            if (p.text) lines.push(p.text);
+            if (lines.length) {
+                const label = makeTextSprite(lines.join('\n'), {
+                    fontSize: 15, color: '#FF1744', worldHeight: 8,
+                    background: 'rgba(13,17,23,0.6)'
+                });
+                label.position.set(p.x, p.y + 9 + lines.length * 4, p.z);
+                doseGroup.add(label);
+            }
+        }
+        scene.add(doseGroup);
+    }
+
+    // Legacy single-point wrapper
     function setDosePoint(x, y, z, resultText) {
-        if (dosePointMesh) {
-            scene.remove(dosePointMesh);
-            dosePointMesh.geometry.dispose();
-            dosePointMesh.material.dispose();
-        }
-        if (dosePointLabel) {
-            scene.remove(dosePointLabel);
-            dosePointLabel.material.map.dispose();
-            dosePointLabel.material.dispose();
-        }
+        setDosePoints([{ x, y, z, text: resultText }]);
+    }
 
-        const geom = new THREE.SphereGeometry(2, 16, 16);
-        const mat = new THREE.MeshBasicMaterial({ color: COLORS.dosePoint });
-        dosePointMesh = new THREE.Mesh(geom, mat);
-        dosePointMesh.position.set(x, y, z);
-        scene.add(dosePointMesh);
+    // -----------------------------------------------------------------------
+    // Still frame of the current view as a PNG data URL (for reports)
+    // -----------------------------------------------------------------------
+    function snapshot() {
+        renderer.render(scene, camera);
+        return renderer.domElement.toDataURL('image/png');
+    }
 
-        const glowGeom = new THREE.SphereGeometry(4, 16, 16);
-        const glowMat = new THREE.MeshBasicMaterial({
-            color: COLORS.dosePoint, transparent: true, opacity: 0.3
+    // -----------------------------------------------------------------------
+    // Survey heat map: a colored horizontal plane textured from a canvas.
+    // area: {minX, maxX, minZ, maxZ, y} in cm. Canvas row 0 = minZ edge,
+    // canvas column 0 = minX edge (matches the -90° X rotation + flipY).
+    // -----------------------------------------------------------------------
+    let heatmapMesh = null;
+
+    function showHeatmap(canvas, area) {
+        clearHeatmap();
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.magFilter = THREE.LinearFilter;
+        tex.needsUpdate = true;
+        const geo = new THREE.PlaneGeometry(area.maxX - area.minX, area.maxZ - area.minZ);
+        const mat = new THREE.MeshBasicMaterial({
+            map: tex, transparent: true, opacity: 0.85,
+            side: THREE.DoubleSide, depthWrite: false
         });
-        dosePointMesh.add(new THREE.Mesh(glowGeom, glowMat));
+        heatmapMesh = new THREE.Mesh(geo, mat);
+        heatmapMesh.rotation.x = -Math.PI / 2;
+        heatmapMesh.position.set(
+            (area.minX + area.maxX) / 2, area.y, (area.minZ + area.maxZ) / 2);
+        heatmapMesh.renderOrder = 5;
+        scene.add(heatmapMesh);
+    }
 
-        if (resultText) {
-            dosePointLabel = makeTextSprite(resultText, { fontSize: 16, color: '#FF1744' });
-            dosePointLabel.position.set(x, y + 10, z);
-            dosePointLabel.scale.set(80, 30, 1);
-            scene.add(dosePointLabel);
-        }
+    function clearHeatmap() {
+        if (!heatmapMesh) return;
+        scene.remove(heatmapMesh);
+        heatmapMesh.geometry.dispose();
+        if (heatmapMesh.material.map) heatmapMesh.material.map.dispose();
+        heatmapMesh.material.dispose();
+        heatmapMesh = null;
     }
 
     // -----------------------------------------------------------------------
@@ -351,19 +496,23 @@ const Scene = (() => {
     // -----------------------------------------------------------------------
     let isodoseGroup = null;
     let isodoseMeshes = [];  // for raycasting click detection
-    let isodoseCenter = { x: 0, y: 0, z: 0 };
+    let isodoseCenters = [{ x: 0, y: 0, z: 0 }];  // one vantage per source
     let clickLabel = null;
     let clickMarker = null;
 
-    function renderIsodoseSurfaces(surfaceData, center) {
+    function renderIsodoseSurfaces(surfaceData, centers) {
         clearIsodoseSurfaces();
 
         isodoseGroup = new THREE.Group();
         isodoseMeshes = [];
-        isodoseCenter = center || { x: 0, y: 0, z: 0 };
+        isodoseCenters = Array.isArray(centers)
+            ? centers.slice()
+            : [centers || { x: 0, y: 0, z: 0 }];
 
         for (const surface of surfaceData) {
             const { level, points, faces } = surface;
+            // Distance labels measure from this surface's own source vantage
+            const surfCenter = surface.center || isodoseCenters[0];
             if (!faces || faces.length === 0) continue;
 
             // Build vertex array
@@ -418,12 +567,12 @@ const Scene = (() => {
             const CM_TO_IN = 1 / 2.54;
             const CM_TO_FT = 1 / 30.48;
 
-            const keyPoints = findKeyPoints(validPts, isodoseCenter);
+            const keyPoints = findKeyPoints(validPts, surfCenter);
             for (const kp of keyPoints) {
                 const dist = Math.sqrt(
-                    (kp.pt.x - isodoseCenter.x) ** 2 +
-                    (kp.pt.y - isodoseCenter.y) ** 2 +
-                    (kp.pt.z - isodoseCenter.z) ** 2
+                    (kp.pt.x - surfCenter.x) ** 2 +
+                    (kp.pt.y - surfCenter.y) ** 2 +
+                    (kp.pt.z - surfCenter.z) ** 2
                 );
                 const distFt = (dist * CM_TO_FT).toFixed(1);
                 const distIn = (dist * CM_TO_IN).toFixed(0);
@@ -437,13 +586,14 @@ const Scene = (() => {
                 isodoseGroup.add(dot);
 
                 // Distance label
-                const sprite = makeTextSprite(text, { fontSize: 14, color: colorHex });
+                const sprite = makeTextSprite(text, {
+                    fontSize: 14, color: colorHex, worldHeight: 7
+                });
                 sprite.position.set(
                     kp.pt.x + kp.offsetX * 8,
                     kp.pt.y + kp.offsetY * 8,
                     kp.pt.z + kp.offsetZ * 8
                 );
-                sprite.scale.set(50, 20, 1);
                 isodoseGroup.add(sprite);
             }
 
@@ -452,10 +602,9 @@ const Scene = (() => {
             if (topPt) {
                 const lvlSprite = makeTextSprite(
                     level.label || (level.value_mrem_hr + ' mrem/hr'),
-                    { fontSize: 16, color: colorHex }
+                    { fontSize: 16, color: colorHex, worldHeight: 10 }
                 );
                 lvlSprite.position.set(topPt.pt.x, topPt.pt.y + 15, topPt.pt.z);
-                lvlSprite.scale.set(70, 28, 1);
                 isodoseGroup.add(lvlSprite);
             }
         }
@@ -525,22 +674,26 @@ const Scene = (() => {
         if (hits.length > 0) {
             const hit = hits[0];
             const pt = hit.point;
-            const dist = Math.sqrt(
-                (pt.x - isodoseCenter.x) ** 2 +
-                (pt.y - isodoseCenter.y) ** 2 +
-                (pt.z - isodoseCenter.z) ** 2
-            );
+            // Distance from the NEAREST source vantage
+            let dist = Infinity;
+            for (const c of isodoseCenters) {
+                const d = Math.sqrt(
+                    (pt.x - c.x) ** 2 + (pt.y - c.y) ** 2 + (pt.z - c.z) ** 2);
+                if (d < dist) dist = d;
+            }
 
             const CM_TO_IN = 1 / 2.54;
             const CM_TO_FT = 1 / 30.48;
             const levelInfo = hit.object.userData.level || {};
             const doseLabel = levelInfo.label || '';
-            const text = doseLabel + ' | Dist: ' +
+            const fromWhat = isodoseCenters.length > 1
+                ? 'from nearest source' : 'from source center';
+            const text = doseLabel + '\n' +
                 (dist * CM_TO_FT).toFixed(1) + "' (" +
-                (dist * CM_TO_IN).toFixed(0) + '") | ' +
-                'X:' + (pt.x * CM_TO_IN).toFixed(1) + '" ' +
-                'Y:' + (pt.y * CM_TO_IN).toFixed(1) + '" ' +
-                'Z:' + (pt.z * CM_TO_IN).toFixed(1) + '"';
+                (dist * CM_TO_IN).toFixed(0) + '") ' + fromWhat + '\n' +
+                'at X ' + (pt.x * CM_TO_IN).toFixed(1) + '"  ' +
+                'Y ' + (pt.y * CM_TO_IN).toFixed(1) + '"  ' +
+                'Z ' + (pt.z * CM_TO_IN).toFixed(1) + '"';
 
             // Marker dot
             const dotGeom = new THREE.SphereGeometry(2, 12, 12);
@@ -550,9 +703,11 @@ const Scene = (() => {
             scene.add(clickMarker);
 
             // Label
-            clickLabel = makeTextSprite(text, { fontSize: 14, color: '#ffffff' });
-            clickLabel.position.set(pt.x, pt.y + 12, pt.z);
-            clickLabel.scale.set(120, 30, 1);
+            clickLabel = makeTextSprite(text, {
+                fontSize: 14, color: '#ffffff', worldHeight: 7,
+                background: 'rgba(13,17,23,0.75)'
+            });
+            clickLabel.position.set(pt.x, pt.y + 18, pt.z);
             scene.add(clickLabel);
         }
     }
@@ -673,8 +828,92 @@ const Scene = (() => {
             if (pt && editorCallbacks.onPickPoint) editorCallbacks.onPickPoint(pt);
             return;
         }
+        if (interactionMode === 'measure') {
+            handleMeasureClick(e);
+            return;
+        }
         const id = pickVolumeId(e);
-        if (editorCallbacks.onSelect) editorCallbacks.onSelect(id);
+        if (editorCallbacks.onSelect) {
+            editorCallbacks.onSelect(id, { x: e.clientX, y: e.clientY });
+        }
+    }
+
+    // =======================================================================
+    // Measure tool: click two points (on volume surfaces or the ground);
+    // draws markers, a line, and a distance label with X/Y/Z deltas.
+    // =======================================================================
+    let measureGroup = null;
+    let measurePtA = null;
+
+    function clearMeasure() {
+        if (measureGroup) {
+            scene.remove(measureGroup);
+            measureGroup.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (child.material.map) child.material.map.dispose();
+                    child.material.dispose();
+                }
+            });
+            measureGroup = null;
+        }
+        measurePtA = null;
+    }
+
+    function measureMarker(pt, color) {
+        const m = new THREE.Mesh(
+            new THREE.SphereGeometry(1.5, 12, 12),
+            new THREE.MeshBasicMaterial({ color: color, depthTest: false })
+        );
+        m.position.set(pt.x, pt.y, pt.z);
+        m.renderOrder = 10;
+        return m;
+    }
+
+    function handleMeasureClick(e) {
+        const pt = pickAnyPoint(e);
+        if (!pt) return;
+
+        if (!measurePtA) {
+            clearMeasure();
+            measurePtA = pt;
+            measureGroup = new THREE.Group();
+            measureGroup.add(measureMarker(pt, 0x2ee6a8));
+            scene.add(measureGroup);
+            if (editorCallbacks.onMeasure) editorCallbacks.onMeasure(pt, null);
+            return;
+        }
+
+        const a = measurePtA, b = pt;
+        measureGroup.add(measureMarker(b, 0x2ee6a8));
+
+        const lineGeom = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(a.x, a.y, a.z),
+            new THREE.Vector3(b.x, b.y, b.z)
+        ]);
+        const line = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({
+            color: 0x2ee6a8, depthTest: false
+        }));
+        line.renderOrder = 10;
+        measureGroup.add(line);
+
+        const IN = 2.54, FT = 30.48;
+        const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const text =
+            (dist / IN).toFixed(2) + '"  (' + (dist / FT).toFixed(2) + " ft)\n" +
+            'ΔX ' + (dx / IN).toFixed(2) + '"  ' +
+            'ΔY ' + (dy / IN).toFixed(2) + '"  ' +
+            'ΔZ ' + (dz / IN).toFixed(2) + '"';
+        const label = makeTextSprite(text, {
+            fontSize: 14, color: '#2ee6a8', worldHeight: 6,
+            background: 'rgba(13,17,23,0.75)'
+        });
+        label.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 + 8, (a.z + b.z) / 2);
+        measureGroup.add(label);
+
+        measurePtA = null;
+        if (editorCallbacks.onMeasure) editorCallbacks.onMeasure(a, b);
     }
 
     function commitGizmoTransform() {
@@ -725,9 +964,11 @@ const Scene = (() => {
 
     // --- Interaction mode ---
     function setMode(mode) {
+        if (interactionMode === 'measure' && mode !== 'measure') clearMeasure();
         interactionMode = mode;
         if (renderer) {
-            renderer.domElement.style.cursor = (mode === 'dose') ? 'crosshair' : 'default';
+            renderer.domElement.style.cursor =
+                (mode === 'dose' || mode === 'measure') ? 'crosshair' : 'default';
         }
         updateGizmoAttachment();
     }
@@ -741,6 +982,10 @@ const Scene = (() => {
         init,
         renderScene,
         setDosePoint,
+        setDosePoints,
+        snapshot,
+        showHeatmap,
+        clearHeatmap,
         renderIsodoseSurfaces,
         clearIsodoseSurfaces,
         onResize,
@@ -749,6 +994,7 @@ const Scene = (() => {
         getSelected,
         setMode,
         getMode,
+        clearMeasure,
         COLORS
     };
 

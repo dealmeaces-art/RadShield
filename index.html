@@ -64,6 +64,65 @@
             margin-bottom: 12px;
         }
 
+        /* --- Sidebar tabs (Model | Analyze | Simulate) --- */
+        #sideTabs { display: flex; gap: 4px; margin-bottom: 12px; }
+        .side-tab {
+            flex: 1; padding: 9px 4px; background: #0d1117;
+            border: 1px solid #30363d; border-radius: 6px;
+            color: #8b949e; font-size: 12px; font-weight: 700; cursor: pointer;
+        }
+        .side-tab:hover { background: #161b22; color: #e6edf3; }
+        .side-tab.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+
+        /* --- Dose point rows --- */
+        .dp-row {
+            border: 1px solid #30363d; border-radius: 6px;
+            padding: 6px 8px; margin-bottom: 6px; background: #161b22;
+        }
+        .dp-row-top { display: flex; gap: 6px; align-items: center; margin-bottom: 5px; }
+        .dp-row-top input[type="text"] {
+            flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 4px;
+            color: #e6edf3; padding: 4px 7px; font-size: 12px; min-width: 0;
+        }
+        .dp-pick {
+            background: #21262d; border: 1px solid #30363d; border-radius: 4px;
+            color: #58a6ff; cursor: pointer; font-size: 12px; padding: 3px 8px;
+        }
+        .dp-pick:hover { background: #30363d; }
+        .dp-row-xyz { display: flex; gap: 4px; align-items: center; font-size: 11px; color: #8b949e; }
+        .dp-row-xyz input {
+            width: 100%; min-width: 0; background: #0d1117; border: 1px solid #30363d;
+            border-radius: 4px; color: #e6edf3; padding: 3px 5px; font-size: 12px;
+        }
+
+        /* --- Results table (multi-point) --- */
+        .result-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .result-table th, .result-table td {
+            border: 1px solid #30363d; padding: 6px 10px; text-align: left;
+        }
+        .result-table th { background: #0d1117; color: #8b949e; font-size: 11px; text-transform: uppercase; }
+        .result-table td.num { font-weight: 700; color: #f0f6fc; }
+        .result-table td.num.high { color: #f85149; }
+        .result-table td.num.medium { color: #d29922; }
+        .result-table td.num.low { color: #3fb950; }
+
+        /* --- Chart canvas + sim controls --- */
+        .chart-canvas {
+            width: 100%; background: #0d1117; border: 1px solid #30363d;
+            border-radius: 6px; margin-top: 8px;
+        }
+        .sim-controls { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+        .sim-controls input[type="range"] { flex: 1; accent-color: #1f6feb; }
+        .sim-play {
+            background: #21262d; border: 1px solid #30363d; border-radius: 6px;
+            color: #58a6ff; cursor: pointer; font-size: 14px; padding: 4px 12px;
+        }
+        .sim-play:hover { background: #30363d; }
+        .sim-time { font-size: 12px; color: #e6edf3; min-width: 78px; text-align: right; }
+        .sim-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+        .sim-table th, .sim-table td { border: 1px solid #30363d; padding: 4px 8px; text-align: left; }
+        .sim-table th { background: #161b22; color: #8b949e; font-size: 10px; text-transform: uppercase; }
+
         .panel-header {
             padding: 10px 12px;
             font-size: 13px;
@@ -264,10 +323,29 @@
             display: block;
         }
 
-        /* --- Results Panel (overlay on viewport) --- */
+        /* --- Contextual "How to" bar (bottom of viewport) --- */
+        #helpbar {
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            display: flex; align-items: baseline; gap: 10px;
+            background: rgba(13, 17, 23, 0.92);
+            border-top: 1px solid #30363d;
+            padding: 7px 14px;
+            font-size: 12px; line-height: 1.45;
+            color: #8b949e;
+            z-index: 4;
+            backdrop-filter: blur(6px);
+        }
+        #helpbar .help-title {
+            color: #58a6ff; font-weight: 700; white-space: nowrap;
+            flex-shrink: 0;
+        }
+        #helpbar .help-text { color: #a8b3bf; }
+
+        /* --- Results Panel (overlay on viewport, above the help bar) --- */
         #results {
             position: absolute;
-            bottom: 16px;
+            bottom: 44px;
             left: 16px;
             right: 16px;
             background: rgba(22, 27, 34, 0.92);
@@ -323,10 +401,10 @@
             margin-top: 2px;
         }
 
-        /* Status bar */
+        /* Status bar (below the ribbon) */
         #status {
             position: absolute;
-            top: 8px;
+            top: 78px;
             left: 8px;
             font-size: 11px;
             color: #8b949e;
@@ -454,18 +532,53 @@
         }
         .topbar-btn:hover { background: #30363d; border-color: #58a6ff; }
 
-        /* --- Viewport mode toolbar --- */
-        #modeToolbar {
-            position: absolute; top: 8px; right: 8px; display: flex; gap: 4px;
-            background: rgba(22, 27, 34, 0.9); border: 1px solid #30363d;
-            border-radius: 8px; padding: 4px; z-index: 5;
+        /* --- Viewport ribbon toolbar (SolidEdge-style command groups) --- */
+        #ribbon {
+            position: absolute; top: 8px; left: 8px; right: 8px;
+            display: flex; gap: 10px; z-index: 5; flex-wrap: wrap;
+            pointer-events: none;
         }
-        #modeToolbar button {
-            background: none; border: none; border-radius: 6px; color: #8b949e;
-            padding: 7px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+        .ribbon-group {
+            background: rgba(22, 27, 34, 0.92); border: 1px solid #30363d;
+            border-radius: 8px; padding: 4px 6px 0; pointer-events: auto;
+            backdrop-filter: blur(6px);
         }
-        #modeToolbar button:hover { background: #21262d; color: #e6edf3; }
-        #modeToolbar button.active { background: #1f6feb; color: #fff; }
+        .ribbon-btns { display: flex; gap: 2px; }
+        .ribbon-group button {
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            background: none; border: none; border-radius: 6px; color: #c9d1d9;
+            padding: 6px 9px 5px; font-size: 10.5px; font-weight: 600;
+            cursor: pointer; min-width: 52px;
+        }
+        .ribbon-group button .ico { font-size: 16px; line-height: 1; }
+        .ribbon-group button:hover { background: #21262d; color: #fff; }
+        .ribbon-group button.active { background: #1f6feb; color: #fff; }
+        .ribbon-title {
+            font-size: 9px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.6px; color: #8b949e; text-align: center;
+            padding: 3px 0 4px; border-top: 1px solid #30363d; margin-top: 3px;
+        }
+
+        /* --- Smart Dimension floating editor --- */
+        .dim-editor {
+            position: fixed; z-index: 90; width: 240px;
+            background: #161b22; border: 1px solid #1f6feb; border-radius: 8px;
+            padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        .dim-editor-header {
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 12px; font-weight: 700; color: #58a6ff; margin-bottom: 8px;
+        }
+        .dim-editor-close {
+            background: none; border: none; color: #8b949e; font-size: 16px;
+            cursor: pointer; padding: 0 4px;
+        }
+        .dim-editor-close:hover { color: #f85149; }
+        .dim-editor input[type="number"] {
+            flex: 1; background: #0d1117; border: 1px solid #30363d;
+            border-radius: 4px; color: #e6edf3; padding: 5px 8px; font-size: 13px;
+            min-width: 0;
+        }
 
         /* --- Outliner --- */
         .outliner-item {
@@ -494,6 +607,14 @@
             color: #8b949e; padding: 0 2px; flex-shrink: 0;
         }
         .outliner-eye.off { color: #f85149; }
+        .outliner-calc {
+            accent-color: #2ea043; flex-shrink: 0; cursor: pointer;
+            width: 13px; height: 13px;
+        }
+        .outliner-item.calc-off .outliner-name,
+        .outliner-item.calc-off .outliner-badge,
+        .outliner-item.calc-off .outliner-dot { opacity: 0.4; }
+        .outliner-item.calc-off .outliner-name { text-decoration: line-through; }
         .outliner-empty { font-size: 11px; color: #8b949e; padding: 6px; }
 
         /* --- Properties panel --- */
@@ -558,14 +679,22 @@
         <h1>RadShield</h1>
         <span class="subtitle">Radiation Dose Rate Calculator</span>
         <div class="topbar-actions">
-            <button class="topbar-btn" onclick="Editor.newScene()">New</button>
-            <button class="topbar-btn" onclick="saveScene()">Save</button>
-            <button class="topbar-btn" onclick="document.getElementById('loadFileInput').click()">Load</button>
+            <button class="topbar-btn" title="Clear the whole scene (undoable with Ctrl+Z)" onclick="Editor.newScene()">New</button>
+            <button class="topbar-btn" title="Download the scene as a .json file — geometry, tank form, dose point, calc settings, isodose levels" onclick="saveScene()">Save</button>
+            <button class="topbar-btn" title="Open a saved RadShield .json scene (replaces the current scene)" onclick="document.getElementById('loadFileInput').click()">Load</button>
+            <button class="topbar-btn" title="Generate a printable dose-assessment report: scene picture, source/shield inventory, dose point results" onclick="generateReport()">Report</button>
             <input type="file" id="loadFileInput" accept=".json" style="display:none" onchange="loadSceneFile(this)">
         </div>
     </div>
     <div id="main">
         <div id="sidebar">
+            <div id="sideTabs">
+                <button class="side-tab active" id="tabbtn-model" onclick="switchTab('model')" title="Build and edit the 3D scene">Model</button>
+                <button class="side-tab" id="tabbtn-analyze" onclick="switchTab('analyze')" title="Dose points, calculation settings, isodose, survey map, sweeps">Analyze</button>
+                <button class="side-tab" id="tabbtn-simulate" onclick="switchTab('simulate')" title="Time simulations: transfers, discharges, spills">Simulate</button>
+            </div>
+
+            <div class="tab-page" id="tab-model">
             <!-- ===== SCENE OBJECTS (outliner) ===== -->
             <div class="panel">
                 <div class="panel-header" onclick="togglePanel(this)">Scene Objects <span class="toggle">&#9660;</span></div>
@@ -610,7 +739,7 @@
                         <div id="lidInputs">
                             <div class="form-row"><label>Lid Material</label><select id="lidMaterial"><option value="steel" selected>Steel</option><option value="lead">Lead</option><option value="concrete">Concrete</option></select></div>
                             <div class="form-row"><label>Lid Thickness</label><input type="number" id="lidThickness" value="4" step="0.25" min="0"><span class="unit">in</span></div>
-                            <div class="form-row"><label>Opening Radius</label><input type="number" id="lidOpening" value="4" step="0.25" min="0"><span class="unit">in</span></div>
+                            <div class="form-row" title="Radius of the access hole in the lid (0 = solid lid). The plug fills this opening."><label>Opening Radius</label><input type="number" id="lidOpening" value="4" step="0.25" min="0"><span class="unit">in</span></div>
                             <div class="divider"></div>
                             <div class="checkbox-row"><input type="checkbox" id="plugEnabled" checked onchange="togglePlugInputs()"><label for="plugEnabled">Plug installed</label></div>
                             <div id="plugInputs">
@@ -624,16 +753,16 @@
                     <div class="panel-header" onclick="togglePanel(this)">Radioactive Source <span class="toggle">&#9660;</span></div>
                     <div class="panel-body">
                         <div class="form-row"><label>Isotope</label><select id="sourceIsotope"><option value="Co-60" selected>Co-60</option><option value="Cs-137">Cs-137</option><option value="Ir-192">Ir-192</option><option value="I-131">I-131</option><option value="Na-24">Na-24</option></select></div>
-                        <div class="form-row"><label>Activity</label><input type="number" id="sourceActivity" value="10" step="1" min="0.001"><span class="unit">Ci</span></div>
-                        <div class="form-row"><label>Liquid Level</label><input type="number" id="liquidLevel" value="24" step="1" min="0"><span class="unit">in</span></div>
+                        <div class="form-row" title="Total activity in the tank"><label>Activity</label><input type="number" id="sourceActivity" value="10" step="1" min="0.001"><span class="unit">Ci</span></div>
+                        <div class="form-row" title="Water depth measured from the tank floor — the water above the sludge acts as shielding"><label>Liquid Level</label><input type="number" id="liquidLevel" value="24" step="1" min="0"><span class="unit">in</span></div>
                         <div class="divider"></div>
-                        <div class="form-row"><label>Distribution</label><select id="sourceDistribution" onchange="toggleSludgeInputs()"><option value="uniform">Uniform (mixed)</option><option value="settled" selected>Settled (sludge on bottom)</option><option value="layered">Custom layer</option></select></div>
+                        <div class="form-row" title="Uniform: activity mixed through all the liquid. Settled: all activity in a thin sludge layer on the floor, clean water above. Custom layer: pick the source layer height."><label>Distribution</label><select id="sourceDistribution" onchange="toggleSludgeInputs()"><option value="uniform">Uniform (mixed)</option><option value="settled" selected>Settled (sludge on bottom)</option><option value="layered">Custom layer</option></select></div>
                         <div id="sludgeInputs">
-                            <div class="form-row"><label>Sludge Thickness</label><input type="number" id="sludgeHeight" value="1" step="0.25" min="0.1"><span class="unit">in</span></div>
+                            <div class="form-row" title="Height of the source layer sitting on the tank floor — all activity concentrates here"><label>Sludge Thickness</label><input type="number" id="sludgeHeight" value="1" step="0.25" min="0.1"><span class="unit">in</span></div>
                         </div>
                     </div>
                 </div>
-                <button class="btn-update-view" onclick="rebuildTank()">Build / Rebuild Tank</button>
+                <button class="btn-update-view" title="Regenerate the tank from this form (replaces the tank parts; keeps objects you added yourself)" onclick="rebuildTank()">Build / Rebuild Tank</button>
             </div>
 
             <!-- ===== INSERT SHAPES ===== -->
@@ -646,31 +775,39 @@
                         </label>
                     </div>
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button class="btn-add-vol" onclick="Editor.addVolume('cylinder','shield')">+ Cylinder</button>
-                        <button class="btn-add-vol" onclick="Editor.addVolume('disk','shield')">+ Disk</button>
-                        <button class="btn-add-vol" onclick="Editor.addVolume('annulus','shield')">+ Annulus</button>
-                        <button class="btn-add-vol source" onclick="Editor.addVolume('cylinder','source')">+ Source</button>
+                        <button class="btn-add-vol" title="12×12×12&quot; steel box — resize in Selected Object or with Smart Dimension (S)" onclick="Editor.addVolume('box','shield')">+ Box / Cube</button>
+                        <button class="btn-add-vol" title="24×24×0.5&quot; thin box — a flat shield panel; rotate it 90° to make a wall" onclick="Editor.addVolume('plate','shield')">+ Plate / Wall</button>
+                        <button class="btn-add-vol" title="6&quot; radius × 12&quot; tall solid cylinder" onclick="Editor.addVolume('cylinder','shield')">+ Cylinder</button>
+                        <button class="btn-add-vol" title="6&quot; radius × 1&quot; thick flat disk" onclick="Editor.addVolume('disk','shield')">+ Disk</button>
+                        <button class="btn-add-vol" title="Hollow cylinder / pipe wall: 6&quot; inner, 7&quot; outer radius, 12&quot; tall" onclick="Editor.addVolume('annulus','shield')">+ Annulus</button>
+                        <button class="btn-add-vol" title="6&quot; radius solid sphere" onclick="Editor.addVolume('sphere','shield')">+ Sphere</button>
+                        <button class="btn-add-vol source" title="Radioactive cylinder (Co-60, 1 Ci by default — change in Selected Object)" onclick="Editor.addVolume('cylinder','source')">+ Source</button>
+                        <button class="btn-add-vol source" title="Radioactive sphere (Co-60, 1 Ci by default — change in Selected Object)" onclick="Editor.addVolume('sphere','source')">+ Source Ball</button>
                     </div>
-                    <button class="add-layer-btn" onclick="Editor.showPipeBuilder()" style="margin-top:8px;">Pipe / Hose Builder…</button>
+                    <button class="add-layer-btn" title="Build a multi-leg pipe or hose run: pick a start point, cross-section, and a list of direction+length legs — optionally radioactive contents" onclick="Editor.showPipeBuilder()" style="margin-top:8px;">Pipe / Hose Builder…</button>
                 </div>
             </div>
 
-            <!-- Dose Point -->
+            </div><!-- /tab-model -->
+
+            <div class="tab-page" id="tab-analyze" style="display:none">
+            <!-- Dose Points -->
             <div class="panel">
-                <div class="panel-header" onclick="togglePanel(this)">Dose Point <span class="toggle">&#9660;</span></div>
-                <div class="panel-body">
-                    <div class="form-row"><label>X Position</label><input type="number" id="doseX" value="0" step="1" onchange="updateDoseMarker()"><span class="unit">in</span></div>
-                    <div class="form-row"><label>Y Position (up)</label><input type="number" id="doseY" value="60" step="1" onchange="updateDoseMarker()"><span class="unit">in</span></div>
-                    <div class="form-row"><label>Z Position</label><input type="number" id="doseZ" value="0" step="1" onchange="updateDoseMarker()"><span class="unit">in</span></div>
-                    <button class="add-layer-btn" onclick="Editor.setMode('dose')">Pick in 3D view (D)</button>
+                <div class="panel-header" onclick="togglePanel(this)">Dose Points <span class="toggle">&#9660;</span></div>
+                <div class="panel-body" style="padding:8px;">
+                    <div class="form-row"><label style="min-width:auto; font-size:11px; color:#8b949e;">
+                        Named locations where the dose rate is evaluated (red markers). Y is up; inches.
+                    </label></div>
+                    <div id="dosePointList"></div>
+                    <button class="add-layer-btn" title="Add another dose point (name it after the location: Operator, Doorway, ...)" onclick="addDosePoint()">+ Add Dose Point</button>
                 </div>
             </div>
             <div class="panel">
                 <div class="panel-header" onclick="togglePanel(this)">Calculation Settings <span class="toggle">&#9660;</span></div>
                 <div class="panel-body">
-                    <div class="form-row"><label>Mesh Density</label><select id="meshDensity"><option value="coarse">Coarse (fast)</option><option value="medium" selected>Medium</option><option value="fine">Fine (slow)</option><option value="very_fine">Very Fine</option></select></div>
-                    <div class="form-row"><label>Units</label><select id="unitSystem"><option value="imperial" selected>mrem/hr</option><option value="si">mSv/hr</option></select></div>
-                    <div class="checkbox-row"><input type="checkbox" id="includeAir" checked><label for="includeAir">Include air attenuation</label></div>
+                    <div class="form-row" title="How finely source volumes are chopped into point elements for the integration. Finer = more accurate near the source, slower."><label>Mesh Density</label><select id="meshDensity"><option value="coarse">Coarse (fast)</option><option value="medium" selected>Medium</option><option value="fine">Fine (slow)</option><option value="very_fine">Very Fine</option></select></div>
+                    <div class="form-row" title="Display units for results (both are always shown; this picks the primary)"><label>Units</label><select id="unitSystem"><option value="imperial" selected>mrem/hr</option><option value="si">mSv/hr</option></select></div>
+                    <div class="checkbox-row" title="Attenuation and buildup in the air between shield and dose point. Small effect at close range; matters at tens of feet."><input type="checkbox" id="includeAir" checked><label for="includeAir">Include air attenuation</label></div>
                 </div>
             </div>
             <!-- Isodose Surface Panel -->
@@ -679,38 +816,161 @@
                 <div class="panel-body">
                     <div class="form-row"><label style="font-size:11px; color:#8b949e; min-width:auto;">Define dose rate boundaries to visualize as 3D surfaces</label></div>
                     <div id="isodoseLevels"></div>
-                    <button class="add-layer-btn" onclick="addIsodoseLevel()">+ Add Level</button>
+                    <button class="add-layer-btn" title="Add another dose-rate boundary to draw (each level gets its own color)" onclick="addIsodoseLevel()">+ Add Level</button>
                     <div class="divider"></div>
-                    <div class="form-row">
+                    <div class="form-row" title="Number of search rays cast from each source. Higher = smoother surfaces, slower. Time scales with the number of sources and levels.">
                         <label>Resolution</label>
                         <select id="isodoseRes">
-                            <option value="2">Low - 162 rays (~5s)</option>
-                            <option value="3" selected>Medium - 642 rays (~20s)</option>
-                            <option value="4">High - 2562 rays (~60s)</option>
+                            <option value="2">Low - 162 rays/source (~5s)</option>
+                            <option value="3" selected>Medium - 642 rays/source (~20s)</option>
+                            <option value="4">High - 2562 rays/source (~60s)</option>
                         </select>
                     </div>
-                    <div class="form-row">
+                    <div class="form-row" title="Rays stop searching past this distance from each source — set it larger than your lowest dose boundary">
                         <label>Max Range</label>
                         <input type="number" id="isodoseRange" value="120" step="12" min="12">
                         <span class="unit">in</span>
                     </div>
-                    <button class="btn-calculate" onclick="generateIsodose()" id="isodoseBtn" style="background:#7c3aed; border-color:#8b5cf6;">Generate Isodose Surfaces</button>
-                    <button class="add-layer-btn" onclick="Scene.clearIsodoseSurfaces(); setStatus('Isodose surfaces cleared');" style="margin-top:4px;">Clear Surfaces</button>
+                    <button class="btn-calculate" title="Draw a 3D surface at each dose-rate boundary. Every enabled source grows its own surface; double-click a surface in the 3D view to inspect a point." onclick="generateIsodose()" id="isodoseBtn" style="background:#7c3aed; border-color:#8b5cf6;">Generate Isodose Surfaces</button>
+                    <button class="add-layer-btn" title="Remove the isodose surfaces from the 3D view" onclick="Scene.clearIsodoseSurfaces(); setStatus('Isodose surfaces cleared');" style="margin-top:4px;">Clear Surfaces</button>
                 </div>
             </div>
 
-            <button class="btn-update-view" onclick="refresh(true)">Re-frame 3D View</button>
-            <button class="btn-calculate" onclick="runCalculation()" id="calcBtn">Calculate Dose Rate</button>
+            <!-- ===== SURVEY HEAT MAP ===== -->
+            <div class="panel">
+                <div class="panel-header" onclick="togglePanel(this)">Survey Heat Map <span class="toggle">&#9660;</span></div>
+                <div class="panel-body">
+                    <div class="form-row"><label style="min-width:auto; font-size:11px; color:#8b949e;">
+                        Paint the dose rate on a horizontal plane — like a posted survey map.
+                    </label></div>
+                    <div class="form-row" title="Height of the survey plane above the floor (waist/chest height of a worker)"><label>Height</label><input type="number" id="heatHeight" value="40" step="6"><span class="unit">in</span></div>
+                    <div class="form-row" title="Distance between survey grid points — smaller is smoother but slower"><label>Grid Spacing</label><input type="number" id="heatSpacing" value="12" step="3" min="2"><span class="unit">in</span></div>
+                    <div class="form-row" title="The map covers this distance from the scene center in every direction"><label>Half-Extent</label><input type="number" id="heatHalf" value="120" step="12" min="12"><span class="unit">in</span></div>
+                    <button class="btn-calculate" id="heatBtn" style="background:#0e7490; border-color:#22d3ee;" title="Compute the dose rate at every grid point and paint the plane" onclick="generateHeatmap()">Generate Heat Map</button>
+                    <button class="add-layer-btn" style="margin-top:4px;" onclick="Scene.clearHeatmap(); document.getElementById('heatLegend').style.display='none'; setStatus('Heat map cleared');">Clear Heat Map</button>
+                    <div id="heatLegend" style="display:none; margin-top:8px;">
+                        <div style="height:12px; border-radius:4px; background:linear-gradient(90deg,#1e40af,#2563eb,#22c55e,#eab308,#f97316,#ef4444,#d946ef);"></div>
+                        <div style="display:flex; justify-content:space-between; font-size:10px; color:#8b949e; margin-top:2px;">
+                            <span>&le;0.1</span><span>1</span><span>10</span><span>100</span><span>1k</span><span>&ge;10k mrem/hr</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== PARAMETER SWEEP ===== -->
+            <div class="panel">
+                <div class="panel-header" onclick="togglePanel(this)">Parameter Sweep <span class="toggle">&#9660;</span></div>
+                <div class="panel-body">
+                    <div class="form-row"><label style="min-width:auto; font-size:11px; color:#8b949e;">
+                        Vary one dimension of an object and chart the dose at every dose point —
+                        e.g. dose vs lead wall thickness.
+                    </label></div>
+                    <button class="add-layer-btn" title="Sweep the object currently selected in the scene" onclick="sweepUseSelected()">Use selected object</button>
+                    <div class="form-row" style="margin-top:6px;"><label>Object</label><span id="sweepTargetLabel" style="font-size:12px; color:#e6edf3;">(none)</span></div>
+                    <div class="form-row"><label>Dimension</label><select id="sweepParam"></select></div>
+                    <div class="form-row"><label>From</label><input type="number" id="sweepFrom" value="0.5" step="0.25"><span class="unit">in</span></div>
+                    <div class="form-row"><label>To</label><input type="number" id="sweepTo" value="4" step="0.25"><span class="unit">in</span></div>
+                    <div class="form-row"><label>Steps</label><input type="number" id="sweepSteps" value="8" step="1" min="2"><span class="unit"></span></div>
+                    <button class="btn-calculate" id="sweepBtn" style="background:#6d28d9; border-color:#8b5cf6;" onclick="runSweep()">Run Sweep</button>
+                    <canvas id="sweepChart" class="chart-canvas" width="640" height="360" style="display:none;"></canvas>
+                </div>
+            </div>
+            </div><!-- /tab-analyze -->
+
+            <div class="tab-page" id="tab-simulate" style="display:none">
+            <!-- ===== TIME SIMULATION ===== -->
+            <div class="panel">
+                <div class="panel-header" onclick="togglePanel(this)">Time Simulation <span class="toggle">&#9660;</span></div>
+                <div class="panel-body">
+                    <div class="form-row"><label style="min-width:auto; font-size:11px; color:#8b949e;">
+                        Move activity between sources over time (transfers, discharges, spills) and watch
+                        the dose rate at every dose point. Destinations must be Source objects (activity 0 is fine).
+                    </label></div>
+                    <div class="form-row" title="Total length of the evolution"><label>Duration</label><input type="number" id="simDuration" value="30" step="5" min="0.1"><span class="unit">min</span></div>
+                    <div class="form-row" title="Time resolution of the curves and playback"><label>Time Steps</label><input type="number" id="simSteps" value="30" step="10" min="2"><span class="unit"></span></div>
+                    <div class="checkbox-row" title="Decay every source by its isotope half-life as the clock runs (matters for Na-24, I-131, Ir-192 over long evolutions)">
+                        <input type="checkbox" id="simDecay"><label for="simDecay">Apply radioactive decay</label></div>
+                    <div class="divider"></div>
+                    <div class="form-row"><label style="min-width:auto; font-weight:700; color:#8b949e; font-size:11px; text-transform:uppercase;">Transfers</label></div>
+                    <div id="simTransferList"></div>
+                    <button class="add-layer-btn" title="Add a transfer: move N curies from one source to another (or from/to outside the scene) over the duration" onclick="addSimTransfer()">+ Add Transfer</button>
+                    <div class="divider"></div>
+                    <div class="checkbox-row" title="Liquid escapes a source into a puddle on the floor that grows as it fills">
+                        <input type="checkbox" id="spillEnabled" onchange="document.getElementById('spillInputs').style.display=this.checked?'block':'none'">
+                        <label for="spillEnabled"><b>Spill scenario</b> (growing floor puddle)</label></div>
+                    <div id="spillInputs" style="display:none">
+                        <div class="form-row" title="The source the spill drains from"><label>From source</label><select id="spillFrom"></select></div>
+                        <div class="form-row" title="How much activity ends up in the puddle"><label>Activity spilled</label><input type="number" id="spillCi" value="1" step="0.1" min="0"><span class="unit">Ci</span></div>
+                        <div class="form-row" title="Total liquid volume spilled — sets how big the puddle grows"><label>Liquid spilled</label><input type="number" id="spillGal" value="10" step="1" min="0.1"><span class="unit">gal</span></div>
+                        <div class="form-row" title="Puddle thickness on the floor; radius = sqrt(volume / (pi × depth))"><label>Puddle depth</label><input type="number" id="spillDepth" value="0.25" step="0.05" min="0.02"><span class="unit">in</span></div>
+                        <div class="form-row"><label>Puddle center X</label><input type="number" id="spillX" value="48" step="6"><span class="unit">in</span></div>
+                        <div class="form-row"><label>Puddle center Z</label><input type="number" id="spillZ" value="0" step="6"><span class="unit">in</span></div>
+                        <div class="form-row"><label>Spill curve</label><select id="spillCurve"></select></div>
+                    </div>
+                    <button class="btn-calculate" id="simRunBtn" title="Precompute the dose matrix, evaluate the whole timeline, and open the results chart" onclick="runSimulation()">Run Simulation</button>
+                </div>
+            </div>
+            <!-- ===== SIMULATION RESULTS ===== -->
+            <div class="panel" id="simResultsPanel" style="display:none">
+                <div class="panel-header" onclick="togglePanel(this)">Simulation Results <span class="toggle">&#9660;</span></div>
+                <div class="panel-body" style="padding:8px;">
+                    <canvas id="simChart" class="chart-canvas" width="640" height="360"></canvas>
+                    <div class="sim-controls">
+                        <button class="sim-play" id="simPlayBtn" title="Play / pause the evolution in the 3D view" onclick="simPlayPause()">&#9654;</button>
+                        <input type="range" id="simScrub" min="0" max="30" value="0" title="Scrub through time"
+                               oninput="simScrubTo(parseInt(this.value))">
+                        <span class="sim-time" id="simTimeLabel">0.0 min</span>
+                    </div>
+                    <table class="sim-table" id="simSummary"></table>
+                </div>
+            </div>
+            </div><!-- /tab-simulate -->
+
+            <button class="btn-update-view" title="Refit the camera to show the whole scene" onclick="refresh(true)">Re-frame 3D View</button>
+            <button class="btn-calculate" title="Compute the dose rate at every dose point from all enabled sources through all enabled shielding" onclick="runCalculation()" id="calcBtn">Calculate Dose Rate</button>
         </div>
         <div id="viewport">
             <div id="status">Ready</div>
-            <div id="modeToolbar">
-                <button id="mode-select" class="active" title="Select (V) — click a volume">Select</button>
-                <button id="mode-translate" title="Move (G) — drag gizmo arrows, snap 0.25&quot;">Move</button>
-                <button id="mode-rotate" title="Rotate (R) — drag gizmo rings, snap 15°">Rotate</button>
-                <button id="mode-dose" title="Dose point (D) — click to place">Dose Pt</button>
+            <div id="ribbon">
+                <div class="ribbon-group">
+                    <div class="ribbon-btns">
+                        <button id="mode-select" class="active" title="Select (V) — click a volume"><span class="ico">➤</span>Select</button>
+                        <button id="mode-translate" title="Move (G) — drag gizmo arrows, snap 0.25&quot;"><span class="ico">✥</span>Move</button>
+                        <button id="mode-rotate" title="Rotate (R) — drag gizmo rings, snap 15°"><span class="ico">⟳</span>Rotate</button>
+                    </div>
+                    <div class="ribbon-title">Mode</div>
+                </div>
+                <div class="ribbon-group">
+                    <div class="ribbon-btns">
+                        <button id="mode-dimension" title="Smart Dimension (S) — click an object to edit its dimensions in place"><span class="ico">⌀</span>Smart Dim</button>
+                        <button id="mode-measure" title="Measure (M) — click two points to measure the distance between them"><span class="ico">⟷</span>Measure</button>
+                        <button id="mode-dose" title="Dose point (D) — click to place"><span class="ico">☢</span>Dose Pt</button>
+                    </div>
+                    <div class="ribbon-title">Inspect</div>
+                </div>
+                <div class="ribbon-group">
+                    <div class="ribbon-btns">
+                        <button data-mate="concentric" onclick="Editor.startMate('concentric')" title="Concentric — share the same axis. Click the object to move, then the target."><span class="ico">◎</span>Concentric</button>
+                        <button data-mate="ontop" onclick="Editor.startMate('ontop')" title="Mate on top — bottom face of the mover sits flush on the target's top face"><span class="ico">⬒</span>On Top</button>
+                        <button data-mate="under" onclick="Editor.startMate('under')" title="Mate beneath — mover's top face flush against the target's bottom face"><span class="ico">⬓</span>Beneath</button>
+                        <button data-mate="flush" onclick="Editor.startMate('flush')" title="Flush / coplanar — bottom faces on the same plane (keeps X/Z offset)"><span class="ico">▂</span>Flush</button>
+                        <button data-mate="center" onclick="Editor.startMate('center')" title="Center — mover centered inside the target"><span class="ico">▣</span>Center In</button>
+                        <button data-mate="rot" onclick="Editor.startMate('rot')" title="Parallel — match the target's orientation only (no move)"><span class="ico">∥</span>Parallel</button>
+                    </div>
+                    <div class="ribbon-title">Relationships</div>
+                </div>
+                <div class="ribbon-group">
+                    <div class="ribbon-btns">
+                        <button onclick="Editor.addVolume('box','shield')" title="Insert a 12&quot; box at the origin"><span class="ico">▦</span>Box</button>
+                        <button onclick="Editor.addVolume('plate','shield')" title="Insert a 24×24×0.5&quot; plate (rotate it to make a wall)"><span class="ico">▬</span>Plate</button>
+                        <button onclick="Editor.addVolume('cylinder','shield')" title="Insert a cylinder"><span class="ico">⬤</span>Cylinder</button>
+                        <button onclick="Editor.addVolume('sphere','shield')" title="Insert a sphere"><span class="ico">◍</span>Sphere</button>
+                    </div>
+                    <div class="ribbon-title">Insert</div>
+                </div>
             </div>
             <div id="results"><h3>Dose Rate Results</h3><div class="result-grid" id="resultGrid"></div></div>
+            <div id="helpbar"></div>
         </div>
     </div>
 
@@ -760,6 +1020,7 @@
     <script src="src/isotopes.js"></script>
     <script src="src/physics.js"></script>
     <script src="src/geometry.js"></script>
+    <script src="src/sim.js"></script>
     <script src="src/scene.js"></script>
     <script src="src/editor.js"></script>
 
@@ -779,9 +1040,11 @@
         window.addEventListener('DOMContentLoaded', () => {
             Scene.init('viewport');
             renderLayerLists();
+            renderDosePoints();
             Editor.init(buildTankModel(), {
                 refresh: (frame) => refresh(frame),
-                setStatus: setStatus
+                setStatus: setStatus,
+                onDosePick: (pt) => onDosePicked(pt)
             });
             refresh(true);
         });
@@ -790,17 +1053,105 @@
         function refresh(frame) {
             const model = Editor.getModel();
             Scene.renderScene(model.getVisData(), model.getBounds(), { frame: frame });
-            updateDoseMarker();
+            updateDoseMarkers();
         }
 
-        function updateDoseMarker() {
+        // -------------------------------------------------------------------
+        // Sidebar tabs
+        // -------------------------------------------------------------------
+        function switchTab(name) {
+            for (const t of ['model', 'analyze', 'simulate']) {
+                document.getElementById('tab-' + t).style.display = (t === name) ? '' : 'none';
+                document.getElementById('tabbtn-' + t).classList.toggle('active', t === name);
+            }
+            if (name === 'simulate') refreshSimControls();
+        }
+
+        // -------------------------------------------------------------------
+        // Dose points: named locations where dose rate is evaluated.
+        // Stored in cm; edited in inches.
+        // -------------------------------------------------------------------
+        let dosePoints = [{ id: 'dp1', name: 'Point 1', x: 0, y: 60 * 2.54, z: 0, lastResult: null }];
+        let dpCounter = 1;
+        let pickTargetDp = 'dp1';   // which point the next 3D pick moves
+
+        function addDosePoint(pt) {
+            dpCounter++;
+            const p = pt || { x: 0, y: 60 * 2.54, z: 0 };
+            const dp = { id: 'dp' + dpCounter, name: 'Point ' + dpCounter, x: p.x, y: p.y, z: p.z, lastResult: null };
+            dosePoints.push(dp);
+            pickTargetDp = dp.id;
+            renderDosePoints();
+            updateDoseMarkers();
+            return dp;
+        }
+
+        function removeDosePoint(id) {
+            dosePoints = dosePoints.filter(d => d.id !== id);
+            renderDosePoints();
+            updateDoseMarkers();
+        }
+
+        function setDpField(id, field, value) {
             const IN = Geometry.INCH_TO_CM;
-            Scene.setDosePoint(
-                parseFloat(document.getElementById('doseX').value) * IN,
-                parseFloat(document.getElementById('doseY').value) * IN,
-                parseFloat(document.getElementById('doseZ').value) * IN,
-                null
-            );
+            const dp = dosePoints.find(d => d.id === id);
+            if (!dp) return;
+            if (field === 'name') dp.name = value;
+            else dp[field] = (parseFloat(value) || 0) * IN;
+            dp.lastResult = null;
+            updateDoseMarkers();
+        }
+
+        function pickDosePoint(id) {
+            pickTargetDp = id;
+            const dp = dosePoints.find(d => d.id === id);
+            Editor.setMode('dose');
+            setStatus('Click in the 3D view to place "' + (dp ? dp.name : 'dose point') + '"');
+        }
+
+        // Called by the editor when the user clicks in dose-pick mode
+        function onDosePicked(pt) {
+            let dp = dosePoints.find(d => d.id === pickTargetDp) || dosePoints[0];
+            if (!dp) { addDosePoint(pt); return; }
+            dp.x = pt.x; dp.y = pt.y; dp.z = pt.z;
+            dp.lastResult = null;
+            renderDosePoints();
+            updateDoseMarkers();
+        }
+
+        function renderDosePoints() {
+            const list = document.getElementById('dosePointList');
+            if (!list) return;
+            const IN = Geometry.INCH_TO_CM;
+            list.innerHTML = '';
+            for (const dp of dosePoints) {
+                const div = document.createElement('div');
+                div.className = 'dp-row';
+                const fmt = v => (Math.round(v / IN * 100) / 100);
+                div.innerHTML =
+                    `<div class="dp-row-top">
+                        <input type="text" value="${dp.name.replace(/"/g, '&quot;')}"
+                               title="Name this location (Operator, Doorway, ...)"
+                               onchange="setDpField('${dp.id}','name',this.value)">
+                        <button class="dp-pick" title="Pick this point's location by clicking in the 3D view"
+                                onclick="pickDosePoint('${dp.id}')">&#127919; Pick</button>
+                        <button class="remove-btn" title="Delete this dose point"
+                                onclick="removeDosePoint('${dp.id}')">&times;</button>
+                     </div>
+                     <div class="dp-row-xyz">
+                        X <input type="number" step="1" value="${fmt(dp.x)}" onchange="setDpField('${dp.id}','x',this.value)">
+                        Y <input type="number" step="1" value="${fmt(dp.y)}" onchange="setDpField('${dp.id}','y',this.value)">
+                        Z <input type="number" step="1" value="${fmt(dp.z)}" onchange="setDpField('${dp.id}','z',this.value)">
+                        <span>in</span>
+                     </div>`;
+                list.appendChild(div);
+            }
+        }
+
+        function updateDoseMarkers() {
+            Scene.setDosePoints(dosePoints.map(d => ({
+                x: d.x, y: d.y, z: d.z, name: d.name, text: d.lastResult || null
+            })));
         }
 
         function rebuildTank() {
@@ -808,27 +1159,107 @@
         }
 
         function saveScene() {
-            const IN = Geometry.INCH_TO_CM;
             Editor.saveToFile({
-                dosePoint: {
-                    x: parseFloat(document.getElementById('doseX').value) * IN,
-                    y: parseFloat(document.getElementById('doseY').value) * IN,
-                    z: parseFloat(document.getElementById('doseZ').value) * IN
-                }
+                dosePoints: dosePoints.map(d => ({ name: d.name, x: d.x, y: d.y, z: d.z })),
+                // Tank template form state: without this, loading a scene left
+                // the form at defaults and the next "Build/Rebuild Tank" wiped
+                // the loaded tank with the default one.
+                tankTemplate: collectTankTemplate(),
+                calcSettings: {
+                    meshDensity: document.getElementById('meshDensity').value,
+                    unitSystem: document.getElementById('unitSystem').value,
+                    includeAir: document.getElementById('includeAir').checked
+                },
+                isodoseLevels: isodoseLevelData
             });
         }
 
         function loadSceneFile(input) {
             if (!input.files || !input.files[0]) return;
             Editor.loadFromFile(input.files[0], (data) => {
-                if (data.dosePoint) {
-                    const IN = Geometry.INCH_TO_CM;
-                    document.getElementById('doseX').value = (data.dosePoint.x / IN).toFixed(1);
-                    document.getElementById('doseY').value = (data.dosePoint.y / IN).toFixed(1);
-                    document.getElementById('doseZ').value = (data.dosePoint.z / IN).toFixed(1);
+                if (Array.isArray(data.dosePoints) && data.dosePoints.length) {
+                    dosePoints = data.dosePoints.map((d, i) => ({
+                        id: 'dp' + (++dpCounter), name: d.name || ('Point ' + (i + 1)),
+                        x: d.x, y: d.y, z: d.z, lastResult: null
+                    }));
+                    pickTargetDp = dosePoints[0].id;
+                } else if (data.dosePoint) {
+                    // Older file format: one unnamed dose point
+                    dosePoints = [{ id: 'dp' + (++dpCounter), name: 'Point 1',
+                        x: data.dosePoint.x, y: data.dosePoint.y, z: data.dosePoint.z, lastResult: null }];
+                    pickTargetDp = dosePoints[0].id;
+                }
+                renderDosePoints();
+                updateDoseMarkers();
+                restoreTankTemplate(data.tankTemplate);
+                if (data.calcSettings) {
+                    const cs = data.calcSettings;
+                    if (cs.meshDensity) document.getElementById('meshDensity').value = cs.meshDensity;
+                    if (cs.unitSystem) document.getElementById('unitSystem').value = cs.unitSystem;
+                    if (cs.includeAir !== undefined) document.getElementById('includeAir').checked = cs.includeAir;
+                }
+                if (Array.isArray(data.isodoseLevels) && data.isodoseLevels.length) {
+                    isodoseLevelData = data.isodoseLevels;
+                    renderIsodoseLevels();
                 }
             });
             input.value = '';
+        }
+
+        // ---- Tank template form <-> JSON (round-trips through Save/Load) ----
+        function collectTankTemplate() {
+            const val = id => parseFloat(document.getElementById(id).value);
+            return {
+                radius: val('tankRadius'),
+                height: val('tankHeight'),
+                wallLayers: wallLayerData.map(l => ({ ...l })),
+                floorLayers: floorLayerData.map(l => ({ ...l })),
+                lidEnabled: document.getElementById('lidEnabled').checked,
+                lidMaterial: document.getElementById('lidMaterial').value,
+                lidThickness: val('lidThickness'),
+                lidOpening: val('lidOpening'),
+                plugEnabled: document.getElementById('plugEnabled').checked,
+                plugMaterial: document.getElementById('plugMaterial').value,
+                plugThickness: val('plugThickness'),
+                isotope: document.getElementById('sourceIsotope').value,
+                activity: val('sourceActivity'),
+                liquidLevel: val('liquidLevel'),
+                distribution: document.getElementById('sourceDistribution').value,
+                sludgeHeight: val('sludgeHeight')
+            };
+        }
+
+        function restoreTankTemplate(t) {
+            if (!t) return;
+            const set = (id, v) => {
+                if (v === undefined || v === null || Number.isNaN(v)) return;
+                const el = document.getElementById(id);
+                if (el) el.value = v;
+            };
+            set('tankRadius', t.radius);
+            set('tankHeight', t.height);
+            if (Array.isArray(t.wallLayers)) {
+                wallLayerData = t.wallLayers.map(l => ({ material: l.material, thickness: l.thickness }));
+            }
+            if (Array.isArray(t.floorLayers)) {
+                floorLayerData = t.floorLayers.map(l => ({ material: l.material, thickness: l.thickness }));
+            }
+            renderLayerLists();
+            document.getElementById('lidEnabled').checked = t.lidEnabled !== false;
+            set('lidMaterial', t.lidMaterial);
+            set('lidThickness', t.lidThickness);
+            set('lidOpening', t.lidOpening);
+            document.getElementById('plugEnabled').checked = t.plugEnabled !== false;
+            set('plugMaterial', t.plugMaterial);
+            set('plugThickness', t.plugThickness);
+            set('sourceIsotope', t.isotope);
+            set('sourceActivity', t.activity);
+            set('liquidLevel', t.liquidLevel);
+            set('sourceDistribution', t.distribution);
+            set('sludgeHeight', t.sludgeHeight);
+            toggleLidInputs();
+            togglePlugInputs();
+            toggleSludgeInputs();
         }
 
         // -------------------------------------------------------------------
@@ -927,6 +1358,7 @@
             setTimeout(() => {
                 try {
                     const currentModel = Editor.getModel();
+                    if (!dosePoints.length) { setStatus('Add a dose point first (Analyze tab)'); return; }
 
                     const density = document.getElementById('meshDensity').value;
                     let nr, nt, nz;
@@ -941,32 +1373,39 @@
                     const elements = currentModel.meshAllSources(nr, nt, nz);
                     const isotopeKey = currentModel.getSourceIsotope();
                     const totalActivity = currentModel.getTotalActivity();
-
-                    const IN = Geometry.INCH_TO_CM;
-                    const dosePos = {
-                        x: parseFloat(document.getElementById('doseX').value) * IN,
-                        y: parseFloat(document.getElementById('doseY').value) * IN,
-                        z: parseFloat(document.getElementById('doseZ').value) * IN
-                    };
+                    const calcOptions = { includeAir: document.getElementById('includeAir').checked };
+                    const useSI = document.getElementById('unitSystem').value === 'si';
 
                     const t0 = performance.now();
-                    const calcOptions = { includeAir: document.getElementById('includeAir').checked };
-                    const result = Physics.volumetricSourceDose(elements, isotopeKey, dosePos, currentModel, calcOptions);
+                    const pointResults = dosePoints.map(dp => {
+                        const dosePos = { x: dp.x, y: dp.y, z: dp.z };
+                        const result = Physics.volumetricSourceDose(
+                            elements, isotopeKey, dosePos, currentModel, calcOptions);
+
+                        // Unshielded reference: per enabled source, own isotope + distance
+                        let quickRef = 0;
+                        for (const vol of currentModel.volumes) {
+                            if (vol.enabled === false || vol.role !== 'source' || !(vol.activity_Ci > 0)) continue;
+                            const h = vol.height || vol.thickness ||
+                                (vol._type() === 'sphere' ? vol.radius * 2 : 0);
+                            const c = vol.localToWorld(0, h / 2, 0);
+                            const dM = Math.sqrt((dosePos.x - c.x) ** 2 + (dosePos.y - c.y) ** 2 +
+                                (dosePos.z - c.z) ** 2) / 100;
+                            quickRef += Physics.quickDose_R_hr(vol.activity_Ci,
+                                vol.isotopeKey || isotopeKey, Math.max(dM, 0.01));
+                        }
+
+                        dp.lastResult = useSI
+                            ? Physics.formatDoseSv(result.total_mSv_hr)
+                            : Physics.formatDose(result.total_mrem_hr);
+                        return { dp: dp, result: result, quickRef: quickRef };
+                    });
                     const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
 
-                    // Quick reference
-                    const bounds = currentModel.getBounds();
-                    const srcCenterY = (bounds.minY + bounds.maxY) / 2;
-                    const distM = Math.sqrt(dosePos.x**2 + (dosePos.y - srcCenterY)**2 + dosePos.z**2) / 100;
-                    const quickRef = Physics.quickDose_R_hr(totalActivity, isotopeKey, Math.max(distM, 0.01));
-
-                    displayResults(result, elements.length, elapsed, quickRef, totalActivity);
-
-                    const useSI = document.getElementById('unitSystem').value === 'si';
-                    const doseText = useSI ? Physics.formatDoseSv(result.total_mSv_hr) : Physics.formatDose(result.total_mrem_hr);
-                    Scene.setDosePoint(dosePos.x, dosePos.y, dosePos.z, doseText);
-
-                    setStatus('Calculation complete in ' + elapsed + 's (' + elements.length + ' elements)');
+                    displayResults(pointResults, elements.length, elapsed, totalActivity);
+                    updateDoseMarkers();
+                    setStatus('Calculation complete in ' + elapsed + 's (' + elements.length +
+                        ' elements × ' + dosePoints.length + ' point' + (dosePoints.length > 1 ? 's' : '') + ')');
                 } catch (e) {
                     setStatus('Error: ' + e.message);
                     console.error(e);
@@ -977,17 +1416,41 @@
             }, 50);
         }
 
-        function displayResults(result, ec, elapsed, qr, act) {
+        function doseClass(mrem) {
+            return mrem > 100 ? 'high' : (mrem > 5 ? 'medium' : 'low');
+        }
+
+        function displayResults(pointResults, ec, elapsed, act) {
             const si = document.getElementById('unitSystem').value === 'si';
             const rd = document.getElementById('results'), g = document.getElementById('resultGrid');
-            let lc = 'low';
-            if (result.total_mrem_hr > 100) lc = 'high';
-            else if (result.total_mrem_hr > 5) lc = 'medium';
-            const pv = si ? Physics.formatDoseSv(result.total_mSv_hr) : Physics.formatDose(result.total_mrem_hr);
-            const sv = si ? Physics.formatDose(result.total_mrem_hr) : Physics.formatDoseSv(result.total_mSv_hr);
-            g.innerHTML = `<div class="result-item"><div class="label">Calculated Dose Rate</div><div class="value ${lc}">${pv}</div><div class="sub">${sv}</div></div><div class="result-item"><div class="label">Unshielded Reference (point src)</div><div class="value" style="font-size:16px">${(qr*1000).toFixed(1)} mR/hr</div><div class="sub">If no shielding existed</div></div><div class="result-item"><div class="label">Shielding Factor</div><div class="value" style="font-size:16px">${result.total_mrem_hr>0?((qr*1000)/result.total_mrem_hr).toFixed(1)+'x':'N/A'}</div><div class="sub">Dose reduction ratio</div></div><div class="result-item"><div class="label">Calculation Details</div><div class="value" style="font-size:14px">${ec} elements</div><div class="sub">${elapsed} seconds | ${act} Ci source</div></div>`;
+            lastPointResults = pointResults;
+
+            if (pointResults.length === 1) {
+                const { result, quickRef } = pointResults[0];
+                const lc = doseClass(result.total_mrem_hr);
+                const pv = si ? Physics.formatDoseSv(result.total_mSv_hr) : Physics.formatDose(result.total_mrem_hr);
+                const sv = si ? Physics.formatDose(result.total_mrem_hr) : Physics.formatDoseSv(result.total_mSv_hr);
+                g.innerHTML = `<div class="result-item"><div class="label">Calculated Dose Rate</div><div class="value ${lc}">${pv}</div><div class="sub">${sv}</div></div><div class="result-item"><div class="label">Unshielded Reference (point src)</div><div class="value" style="font-size:16px">${(quickRef*1000).toFixed(1)} mR/hr</div><div class="sub">If no shielding existed</div></div><div class="result-item"><div class="label">Shielding Factor</div><div class="value" style="font-size:16px">${result.total_mrem_hr>0?((quickRef*1000)/result.total_mrem_hr).toFixed(1)+'x':'N/A'}</div><div class="sub">Dose reduction ratio</div></div><div class="result-item"><div class="label">Calculation Details</div><div class="value" style="font-size:14px">${ec} elements</div><div class="sub">${elapsed} seconds | ${act} Ci source</div></div>`;
+            } else {
+                const rows = pointResults.map(({ dp, result, quickRef }) => {
+                    const lc = doseClass(result.total_mrem_hr);
+                    const pv = si ? Physics.formatDoseSv(result.total_mSv_hr) : Physics.formatDose(result.total_mrem_hr);
+                    const sv = si ? Physics.formatDose(result.total_mrem_hr) : Physics.formatDoseSv(result.total_mSv_hr);
+                    const sf = result.total_mrem_hr > 0 ? ((quickRef * 1000) / result.total_mrem_hr).toFixed(1) + 'x' : 'N/A';
+                    return `<tr><td>${dp.name}</td><td class="num ${lc}">${pv}</td><td>${sv}</td>` +
+                        `<td>${(quickRef * 1000).toFixed(1)} mR/hr</td><td>${sf}</td></tr>`;
+                }).join('');
+                g.innerHTML = `<div style="grid-column:1/-1;">
+                    <table class="result-table">
+                        <tr><th>Dose Point</th><th>Dose Rate</th><th></th><th>Unshielded</th><th>Shield Factor</th></tr>
+                        ${rows}
+                    </table>
+                    <div style="font-size:11px; color:#8b949e; margin-top:6px;">${ec} source elements · ${elapsed} s · ${act} Ci total</div>
+                </div>`;
+            }
             rd.classList.add('visible');
         }
+        let lastPointResults = null;   // kept for the report generator
 
         function setStatus(m) { document.getElementById('status').textContent = m; }
 
@@ -1060,25 +1523,37 @@
             setTimeout(() => {
                 try {
                     const model = Editor.getModel();
-
-                    // Mesh source — need fine enough mesh for accuracy
-                    // nr=5, ntheta=16, nz=8 = 640 elements (good balance of accuracy and speed)
-                    const elements = model.meshAllSources(5, 16, 8);
                     const isotopeKey = model.getSourceIsotope();
                     const IN = Geometry.INCH_TO_CM;
 
-                    // Get source centroid (center of mass of source elements)
-                    let cx = 0, cy = 0, cz = 0;
-                    for (const el of elements) {
-                        cx += el.position.x;
-                        cy += el.position.y;
-                        cz += el.position.z;
+                    // Mesh each enabled source separately (nr=5, ntheta=16,
+                    // nz=8 = 640 elements per source). Every source gets its
+                    // own ray-cast vantage center so widely separated sources
+                    // each grow their own isodose lobes; the dose at every
+                    // sample point still sums ALL elements.
+                    const elements = [];
+                    const centers = [];
+                    for (const vol of model.volumes) {
+                        if (vol.enabled === false || vol.role !== 'source') continue;
+                        const els = vol.meshSource(5, 16, 8);
+                        if (!els.length) continue;
+                        let cx = 0, cy = 0, cz = 0;
+                        for (const el of els) {
+                            cx += el.position.x;
+                            cy += el.position.y;
+                            cz += el.position.z;
+                        }
+                        centers.push({
+                            x: cx / els.length,
+                            y: cy / els.length,
+                            z: cz / els.length
+                        });
+                        elements.push(...els);
                     }
-                    const center = {
-                        x: cx / elements.length,
-                        y: cy / elements.length,
-                        z: cz / elements.length
-                    };
+                    if (!centers.length) {
+                        setStatus('No active sources — add a source (or re-enable one) first');
+                        return;
+                    }
 
                     // Resolution = icosphere subdivision level
                     const subdivisions = parseInt(document.getElementById('isodoseRes').value) || 3;
@@ -1097,7 +1572,7 @@
 
                     // Run generation with progress callback
                     const surfaces = Physics.generateIsodoseSurfaces(
-                        elements, isotopeKey, model, center, levels,
+                        elements, isotopeKey, model, centers, levels,
                         {
                             includeAir: includeAir,
                             subdivisions: subdivisions,
@@ -1113,10 +1588,12 @@
                     const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
 
                     // Render the surfaces
-                    Scene.renderIsodoseSurfaces(surfaces, center);
+                    Scene.renderIsodoseSurfaces(surfaces, centers);
 
                     const totalFaces = surfaces.reduce((s, surf) => s + surf.faces.length, 0);
-                    setStatus('Isodose surfaces generated in ' + elapsed + 's (' + totalFaces + ' triangles)');
+                    setStatus('Isodose surfaces generated in ' + elapsed + 's (' +
+                        centers.length + ' source' + (centers.length > 1 ? 's' : '') +
+                        ', ' + totalFaces + ' triangles)');
 
                 } catch (e) {
                     setStatus('Error: ' + e.message);
@@ -1126,6 +1603,605 @@
                     btn.textContent = 'Generate Isodose Surfaces';
                 }
             }, 50);
+        }
+
+        // ===================================================================
+        // Line chart renderer (shared by simulation and parameter sweep)
+        // series: [{name, color, points:[{x,y}]}]
+        // opts: {xLabel, yLabel, cursorX}
+        // ===================================================================
+        const CHART_COLORS = ['#58a6ff', '#3fb950', '#f0883e', '#f85149', '#a371f7', '#39d2c0', '#d29922'];
+
+        function niceStep(raw) {
+            if (!(raw > 0)) return 1;
+            const p = Math.pow(10, Math.floor(Math.log10(raw)));
+            const m = raw / p;
+            return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
+        }
+
+        function drawChart(canvas, series, opts) {
+            opts = opts || {};
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+            const L = 62, R = 14, T = 14, B = 40;
+            ctx.clearRect(0, 0, W, H);
+            ctx.fillStyle = '#0d1117';
+            ctx.fillRect(0, 0, W, H);
+
+            let xmin = Infinity, xmax = -Infinity, ymax = 0;
+            for (const s of series) for (const p of s.points) {
+                if (p.x < xmin) xmin = p.x;
+                if (p.x > xmax) xmax = p.x;
+                if (p.y > ymax) ymax = p.y;
+            }
+            if (!isFinite(xmin) || xmax === xmin) { xmin = 0; xmax = 1; }
+            if (ymax <= 0) ymax = 1;
+            ymax *= 1.08;
+
+            const px = x => L + (x - xmin) / (xmax - xmin) * (W - L - R);
+            const py = y => H - B - (y / ymax) * (H - T - B);
+
+            // Gridlines + ticks
+            ctx.font = '11px Segoe UI, Arial';
+            ctx.strokeStyle = '#21262d'; ctx.fillStyle = '#8b949e';
+            const ys = niceStep(ymax / 4);
+            for (let y = 0; y <= ymax; y += ys) {
+                ctx.beginPath(); ctx.moveTo(L, py(y)); ctx.lineTo(W - R, py(y)); ctx.stroke();
+                ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+                ctx.fillText(y >= 1000 ? y.toExponential(1) : +(y.toFixed(3)), L - 6, py(y));
+            }
+            const xs = niceStep((xmax - xmin) / 5);
+            for (let x = Math.ceil(xmin / xs) * xs; x <= xmax; x += xs) {
+                ctx.beginPath(); ctx.moveTo(px(x), T); ctx.lineTo(px(x), H - B); ctx.stroke();
+                ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+                ctx.fillText(+(x.toFixed(2)), px(x), H - B + 5);
+            }
+            // Axes
+            ctx.strokeStyle = '#30363d';
+            ctx.beginPath(); ctx.moveTo(L, T); ctx.lineTo(L, H - B); ctx.lineTo(W - R, H - B); ctx.stroke();
+            if (opts.xLabel) {
+                ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = '#8b949e';
+                ctx.fillText(opts.xLabel, L + (W - L - R) / 2, H - 4);
+            }
+            if (opts.yLabel) {
+                ctx.save(); ctx.translate(12, T + (H - T - B) / 2); ctx.rotate(-Math.PI / 2);
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(opts.yLabel, 0, 0); ctx.restore();
+            }
+
+            // Series
+            series.forEach((s, i) => {
+                ctx.strokeStyle = s.color || CHART_COLORS[i % CHART_COLORS.length];
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                s.points.forEach((p, k) => k ? ctx.lineTo(px(p.x), py(p.y)) : ctx.moveTo(px(p.x), py(p.y)));
+                ctx.stroke();
+            });
+            ctx.lineWidth = 1;
+
+            // Legend
+            series.forEach((s, i) => {
+                const y = T + 6 + i * 16;
+                ctx.fillStyle = s.color || CHART_COLORS[i % CHART_COLORS.length];
+                ctx.fillRect(L + 8, y, 10, 10);
+                ctx.fillStyle = '#c9d1d9'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+                ctx.fillText(s.name, L + 23, y - 1);
+            });
+
+            // Time cursor
+            if (opts.cursorX !== undefined && opts.cursorX !== null) {
+                ctx.strokeStyle = '#f0f6fc';
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath(); ctx.moveTo(px(opts.cursorX), T); ctx.lineTo(px(opts.cursorX), H - B); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        // ===================================================================
+        // Time Simulation UI
+        // ===================================================================
+        let simTransfers = [{ fromId: '', toId: '', amountCi: 10, viaId: '', transitCi: 0, curve: 'linear' }];
+        let simResults = null;
+        let simPlayTimer = null;
+        let simStepIdx = 0;
+
+        function sceneSources() {
+            return Editor.getModel().volumes.filter(v => v.role === 'source' && v.enabled !== false);
+        }
+
+        function sourceOptions(selected, includeExternal, externalLabel) {
+            let html = includeExternal
+                ? `<option value="" ${!selected ? 'selected' : ''}>${externalLabel}</option>` : '';
+            for (const v of sceneSources()) {
+                const name = (v.label || v.id).replace(/</g, '&lt;');
+                html += `<option value="${v.id}" ${selected === v.id ? 'selected' : ''}>${name}</option>`;
+            }
+            return html;
+        }
+
+        function curveOptions(selected) {
+            return Object.entries(Sim.CURVES).map(([k, c]) =>
+                `<option value="${k}" ${selected === k ? 'selected' : ''}>${c.label}</option>`).join('');
+        }
+
+        function refreshSimControls() {
+            renderSimTransfers();
+            const sf = document.getElementById('spillFrom');
+            sf.innerHTML = sourceOptions(sf.value, false);
+            const sc = document.getElementById('spillCurve');
+            if (!sc.options.length) sc.innerHTML = curveOptions('linear');
+        }
+
+        function addSimTransfer() {
+            simTransfers.push({ fromId: '', toId: '', amountCi: 1, viaId: '', transitCi: 0, curve: 'linear' });
+            renderSimTransfers();
+        }
+
+        function removeSimTransfer(i) {
+            simTransfers.splice(i, 1);
+            renderSimTransfers();
+        }
+
+        function setSimTransfer(i, field, value) {
+            if (!simTransfers[i]) return;
+            if (field === 'amountCi' || field === 'transitCi') value = parseFloat(value) || 0;
+            simTransfers[i][field] = value;
+        }
+
+        function renderSimTransfers() {
+            const list = document.getElementById('simTransferList');
+            if (!list) return;
+            list.innerHTML = '';
+            simTransfers.forEach((tr, i) => {
+                const div = document.createElement('div');
+                div.className = 'dp-row';
+                div.innerHTML =
+                    `<div class="dp-row-xyz" style="margin-bottom:4px;">
+                        <span>From</span><select onchange="setSimTransfer(${i},'fromId',this.value)" style="flex:1; min-width:0;">${sourceOptions(tr.fromId, true, '(outside scene)')}</select>
+                        <span>to</span><select onchange="setSimTransfer(${i},'toId',this.value)" style="flex:1; min-width:0;">${sourceOptions(tr.toId, true, '(out of scene)')}</select>
+                        <button class="remove-btn" title="Remove this transfer" onclick="removeSimTransfer(${i})">&times;</button>
+                     </div>
+                     <div class="dp-row-xyz" style="margin-bottom:4px;">
+                        <input type="number" step="0.5" min="0" value="${tr.amountCi}" title="Curies moved over the duration"
+                               onchange="setSimTransfer(${i},'amountCi',this.value)"><span>Ci,</span>
+                        <select title="Shape of the transfer vs time" onchange="setSimTransfer(${i},'curve',this.value)" style="flex:2; min-width:0;">${curveOptions(tr.curve)}</select>
+                     </div>
+                     <div class="dp-row-xyz">
+                        <span>via</span><select title="Optional carrier (hose): holds a transit inventory while the flow is active" onchange="setSimTransfer(${i},'viaId',this.value)" style="flex:1; min-width:0;">${sourceOptions(tr.viaId, true, '(no carrier)')}</select>
+                        <input type="number" step="0.05" min="0" value="${tr.transitCi}" title="Curies held inside the carrier while flowing"
+                               onchange="setSimTransfer(${i},'transitCi',this.value)"><span>Ci transit</span>
+                     </div>`;
+                list.appendChild(div);
+            });
+        }
+
+        const GAL_TO_CM3 = 3785.41;
+
+        function runSimulation() {
+            const model = Editor.getModel();
+            if (!dosePoints.length) { setStatus('Add a dose point first (Analyze tab)'); return; }
+            simStopPlayback();
+
+            const IN = Geometry.INCH_TO_CM;
+            const cfg = {
+                durationMin: parseFloat(document.getElementById('simDuration').value) || 30,
+                steps: parseInt(document.getElementById('simSteps').value) || 30,
+                decay: document.getElementById('simDecay').checked,
+                transfers: simTransfers
+                    .filter(t => (t.fromId || t.toId) && t.amountCi > 0)
+                    .map(t => ({ fromId: t.fromId || null, toId: t.toId || null,
+                        amountCi: t.amountCi, curve: t.curve,
+                        viaId: t.viaId || null, transitCi: t.transitCi || 0 }))
+            };
+
+            // Spill: ensure the puddle object exists, then describe the spill
+            if (document.getElementById('spillEnabled').checked) {
+                const fromId = document.getElementById('spillFrom').value;
+                const fromVol = model.getVolume(fromId);
+                if (!fromVol) { setStatus('Spill: pick the source it drains from'); return; }
+                let puddle = model.getVolume('spill-puddle');
+                const depth = (parseFloat(document.getElementById('spillDepth').value) || 0.25) * IN;
+                const px = (parseFloat(document.getElementById('spillX').value) || 0) * IN;
+                const pz = (parseFloat(document.getElementById('spillZ').value) || 0) * IN;
+                if (!puddle) {
+                    puddle = new Geometry.DiskVolume({
+                        id: 'spill-puddle', role: 'source', materialKey: 'water',
+                        position: { x: px, y: 0, z: pz },
+                        dimensions: { radius: 1, thickness: depth },
+                        priority: 30, label: 'Spill Puddle',
+                        isotopeKey: fromVol.isotopeKey || 'Co-60', activity_Ci: 0
+                    });
+                    model.addVolume(puddle);
+                    Editor.refreshAll(false);
+                } else {
+                    puddle.position = { x: px, y: 0, z: pz };
+                    puddle.thickness = depth; puddle.height = depth;
+                    puddle.isotopeKey = fromVol.isotopeKey || 'Co-60';
+                }
+                cfg.spill = {
+                    volId: 'spill-puddle', fromId: fromId,
+                    amountCi: parseFloat(document.getElementById('spillCi').value) || 0,
+                    totalVolume_cm3: (parseFloat(document.getElementById('spillGal').value) || 0) * GAL_TO_CM3,
+                    depth_cm: depth,
+                    curve: document.getElementById('spillCurve').value || 'linear'
+                };
+            }
+
+            if (!cfg.transfers.length && !cfg.spill && !cfg.decay) {
+                setStatus('Nothing to simulate: add a transfer, enable the spill, or check decay');
+                return;
+            }
+
+            const btn = document.getElementById('simRunBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Simulating...';
+            setStatus('Running time simulation...');
+
+            setTimeout(() => {
+                try {
+                    const t0 = performance.now();
+                    simResults = Sim.runTimeline(model,
+                        dosePoints.map(d => ({ x: d.x, y: d.y, z: d.z })), cfg,
+                        { mesh: { nr: 3, nt: 8, nz: 6 },
+                          includeAir: document.getElementById('includeAir').checked });
+                    const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+
+                    document.getElementById('simResultsPanel').style.display = '';
+                    const scrub = document.getElementById('simScrub');
+                    scrub.max = simResults.times_min.length - 1;
+                    scrub.value = 0;
+                    drawSimChart();
+                    renderSimSummary();
+                    simScrubTo(0);
+                    setStatus('Simulation complete in ' + elapsed + 's — press ▶ to play it back');
+                } catch (e) {
+                    setStatus('Simulation error: ' + e.message);
+                    console.error(e);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Run Simulation';
+                }
+            }, 30);
+        }
+
+        function drawSimChart(cursorMin) {
+            if (!simResults) return;
+            const series = dosePoints.map((dp, j) => ({
+                name: dp.name,
+                color: CHART_COLORS[j % CHART_COLORS.length],
+                points: simResults.times_min.map((t, i) => ({ x: t, y: simResults.doses[j][i] }))
+            }));
+            drawChart(document.getElementById('simChart'), series, {
+                xLabel: 'time (min)', yLabel: 'dose rate (mrem/hr)', cursorX: cursorMin
+            });
+        }
+
+        function renderSimSummary() {
+            const tbl = document.getElementById('simSummary');
+            if (!simResults) { tbl.innerHTML = ''; return; }
+            let html = '<tr><th>Dose Point</th><th>Peak</th><th>Integrated Dose</th></tr>';
+            dosePoints.forEach((dp, j) => {
+                const pk = simResults.peak[j];
+                html += `<tr><td style="color:${CHART_COLORS[j % CHART_COLORS.length]}">${dp.name}</td>` +
+                    `<td>${Physics.formatDose(pk.mrem_hr)} @ ${pk.at_min.toFixed(1)} min</td>` +
+                    `<td><b>${simResults.integrated_mrem[j] >= 1
+                        ? simResults.integrated_mrem[j].toFixed(2) + ' mrem'
+                        : (simResults.integrated_mrem[j] * 1000).toFixed(1) + ' µrem'}</b></td></tr>`;
+            });
+            tbl.innerHTML = html;
+        }
+
+        function simScrubTo(i) {
+            if (!simResults) return;
+            simStepIdx = Math.max(0, Math.min(i, simResults.times_min.length - 1));
+            const t = simResults.times_min[simStepIdx];
+            document.getElementById('simScrub').value = simStepIdx;
+            document.getElementById('simTimeLabel').textContent = t.toFixed(1) + ' min';
+            drawSimChart(t);
+
+            // Live dose readouts on the 3D markers
+            dosePoints.forEach((dp, j) => {
+                dp.lastResult = Physics.formatDose(simResults.doses[j][simStepIdx]) +
+                    ' @ ' + t.toFixed(1) + ' min';
+            });
+            updateDoseMarkers();
+
+            // Growing puddle in the 3D view
+            if (simResults.spillRadius_cm) {
+                const puddle = Editor.getModel().getVolume('spill-puddle');
+                if (puddle) {
+                    puddle.radius = Math.max(1, simResults.spillRadius_cm[simStepIdx]);
+                    refresh(false);
+                }
+            }
+        }
+
+        function simPlayPause() {
+            if (simPlayTimer) { simStopPlayback(); return; }
+            if (!simResults) return;
+            if (simStepIdx >= simResults.times_min.length - 1) simStepIdx = 0;
+            document.getElementById('simPlayBtn').innerHTML = '&#10074;&#10074;';
+            simPlayTimer = setInterval(() => {
+                if (simStepIdx >= simResults.times_min.length - 1) { simStopPlayback(); return; }
+                simScrubTo(simStepIdx + 1);
+            }, 150);
+        }
+
+        function simStopPlayback() {
+            if (simPlayTimer) { clearInterval(simPlayTimer); simPlayTimer = null; }
+            const btn = document.getElementById('simPlayBtn');
+            if (btn) btn.innerHTML = '&#9654;';
+        }
+
+        // ===================================================================
+        // Survey heat map: dose rate on a horizontal plane, painted like a
+        // posted survey map. Log color scale, one decade per color band.
+        // ===================================================================
+        const HEAT_STOPS = [   // [log10(mrem/hr), r, g, b]
+            [-1, 0x1e, 0x40, 0xaf],   // 0.1  deep blue
+            [0,  0x25, 0x63, 0xeb],   // 1    blue
+            [1,  0x22, 0xc5, 0x5e],   // 10   green
+            [2,  0xea, 0xb3, 0x08],   // 100  yellow
+            [3,  0xf9, 0x73, 0x16],   // 1000 orange
+            [4,  0xef, 0x44, 0x44],   // 10k  red
+            [5,  0xd9, 0x46, 0xef]    // 100k magenta
+        ];
+
+        function heatColor(mrem) {
+            const lg = Math.log10(Math.max(mrem, 1e-6));
+            if (lg <= HEAT_STOPS[0][0]) return [30, 64, 175, 60];   // faint blue background
+            const last = HEAT_STOPS[HEAT_STOPS.length - 1];
+            if (lg >= last[0]) return [last[1], last[2], last[3], 230];
+            for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
+                const a = HEAT_STOPS[i], b = HEAT_STOPS[i + 1];
+                if (lg >= a[0] && lg <= b[0]) {
+                    const t = (lg - a[0]) / (b[0] - a[0]);
+                    return [
+                        Math.round(a[1] + t * (b[1] - a[1])),
+                        Math.round(a[2] + t * (b[2] - a[2])),
+                        Math.round(a[3] + t * (b[3] - a[3])),
+                        200
+                    ];
+                }
+            }
+            return [0, 0, 0, 0];
+        }
+
+        function generateHeatmap() {
+            const model = Editor.getModel();
+            const IN = Geometry.INCH_TO_CM;
+            const elements = model.meshAllSources(3, 6, 6);
+            if (!elements.length) { setStatus('No active sources — nothing to map'); return; }
+            const isotopeKey = model.getSourceIsotope();
+            const calcOpts = { includeAir: document.getElementById('includeAir').checked };
+
+            const y = (parseFloat(document.getElementById('heatHeight').value) || 40) * IN;
+            const spacing = Math.max(2 * IN,
+                (parseFloat(document.getElementById('heatSpacing').value) || 12) * IN);
+            const half = Math.max(12 * IN,
+                (parseFloat(document.getElementById('heatHalf').value) || 120) * IN);
+
+            // Center the map on the scene footprint
+            const b = model.getBounds();
+            const cx = isFinite(b.minX) ? (b.minX + b.maxX) / 2 : 0;
+            const cz = isFinite(b.minZ) ? (b.minZ + b.maxZ) / 2 : 0;
+            const area = { minX: cx - half, maxX: cx + half, minZ: cz - half, maxZ: cz + half, y: y };
+
+            const n = Math.min(121, Math.floor(2 * half / spacing) + 1);
+            const btn = document.getElementById('heatBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Mapping... 0%';
+            setStatus('Computing survey heat map (' + n + '×' + n + ' points)...');
+
+            const canvas = document.createElement('canvas');
+            canvas.width = n; canvas.height = n;
+            const ctx = canvas.getContext('2d');
+            const img = ctx.createImageData(n, n);
+
+            let row = 0;
+            const t0 = performance.now();
+            (function doRow() {
+                const wz = area.minZ + (row / (n - 1)) * (area.maxZ - area.minZ);
+                for (let col = 0; col < n; col++) {
+                    const wx = area.minX + (col / (n - 1)) * (area.maxX - area.minX);
+                    const dose = Physics.volumetricSourceDose(
+                        elements, isotopeKey, { x: wx, y: y, z: wz }, model, calcOpts).total_mrem_hr;
+                    const c = heatColor(dose);
+                    const o = (row * n + col) * 4;
+                    img.data[o] = c[0]; img.data[o + 1] = c[1];
+                    img.data[o + 2] = c[2]; img.data[o + 3] = c[3];
+                }
+                row++;
+                btn.innerHTML = '<span class="spinner"></span> Mapping... ' + Math.round(row / n * 100) + '%';
+                if (row < n) { setTimeout(doRow, 0); return; }
+
+                ctx.putImageData(img, 0, 0);
+                Scene.showHeatmap(canvas, area);
+                document.getElementById('heatLegend').style.display = '';
+                btn.disabled = false;
+                btn.textContent = 'Generate Heat Map';
+                setStatus('Heat map complete in ' + ((performance.now() - t0) / 1000).toFixed(1) +
+                    's — plane at ' + (y / IN).toFixed(0) + '" height, ' + n + '×' + n + ' points');
+            })();
+        }
+
+        // ===================================================================
+        // Parameter sweep: vary one dimension of an object, chart the dose
+        // at every dose point vs the swept value.
+        // ===================================================================
+        let sweepTargetId = null;
+        const SWEEP_PARAMS = {
+            radius: 'Radius', height: 'Height', thickness: 'Thickness',
+            width: 'Width (X)', depth: 'Depth (Z)',
+            innerRadius: 'Inner Radius', outerRadius: 'Outer Radius'
+        };
+
+        function sweepUseSelected() {
+            const id = Editor.getSelection();
+            const vol = id ? Editor.getModel().getVolume(id) : null;
+            if (!vol) { setStatus('Select an object first (click it in the 3D view)'); return; }
+            sweepTargetId = id;
+            document.getElementById('sweepTargetLabel').textContent = vol.label || vol.id;
+            const dims = vol._dims();
+            document.getElementById('sweepParam').innerHTML = Object.keys(dims).map(k =>
+                `<option value="${k}">${SWEEP_PARAMS[k] || k}</option>`).join('');
+            const IN = Geometry.INCH_TO_CM;
+            const first = Object.keys(dims)[0];
+            document.getElementById('sweepFrom').value = +(dims[first] / IN / 2).toFixed(2);
+            document.getElementById('sweepTo').value = +(dims[first] / IN * 2).toFixed(2);
+            setStatus('Sweep target: ' + (vol.label || vol.id));
+        }
+
+        function runSweep() {
+            const model = Editor.getModel();
+            const vol = sweepTargetId ? model.getVolume(sweepTargetId) : null;
+            if (!vol) { setStatus('Pick a sweep object first ("Use selected object")'); return; }
+            if (!dosePoints.length) { setStatus('Add a dose point first'); return; }
+            const IN = Geometry.INCH_TO_CM;
+            const param = document.getElementById('sweepParam').value;
+            const from = parseFloat(document.getElementById('sweepFrom').value) * IN;
+            const to = parseFloat(document.getElementById('sweepTo').value) * IN;
+            const steps = Math.max(2, parseInt(document.getElementById('sweepSteps').value) || 8);
+            if (!(from > 0) || !(to > 0)) { setStatus('Sweep range must be positive'); return; }
+
+            const setParam = v => {
+                if (param === 'thickness') { vol.thickness = v; vol.height = v; }
+                else vol[param] = v;
+            };
+            const saved = param === 'thickness' ? vol.thickness : vol[param];
+            const isotopeKey = model.getSourceIsotope();
+            const calcOpts = { includeAir: document.getElementById('includeAir').checked };
+
+            const btn = document.getElementById('sweepBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Sweeping...';
+            setTimeout(() => {
+                try {
+                    const series = dosePoints.map((dp, j) => ({
+                        name: dp.name, color: CHART_COLORS[j % CHART_COLORS.length], points: []
+                    }));
+                    for (let i = 0; i <= steps; i++) {
+                        const v = from + (to - from) * (i / steps);
+                        setParam(v);
+                        const els = model.meshAllSources(3, 6, 6);
+                        dosePoints.forEach((dp, j) => {
+                            const d = Physics.volumetricSourceDose(els, isotopeKey,
+                                { x: dp.x, y: dp.y, z: dp.z }, model, calcOpts).total_mrem_hr;
+                            series[j].points.push({ x: v / IN, y: d });
+                        });
+                    }
+                    setParam(saved);
+                    refresh(false);
+                    const canvas = document.getElementById('sweepChart');
+                    canvas.style.display = '';
+                    drawChart(canvas, series, {
+                        xLabel: (SWEEP_PARAMS[param] || param) + ' (in)',
+                        yLabel: 'dose rate (mrem/hr)'
+                    });
+                    setStatus('Sweep complete: ' + (vol.label || vol.id) + ' ' +
+                        (SWEEP_PARAMS[param] || param) + ' from ' + (from / IN) + '" to ' + (to / IN) + '"');
+                } catch (e) {
+                    setParam(saved);
+                    setStatus('Sweep error: ' + e.message);
+                    console.error(e);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Run Sweep';
+                }
+            }, 30);
+        }
+
+        // ===================================================================
+        // Printable dose-assessment report
+        // ===================================================================
+        function dimsText(vol) {
+            const IN = Geometry.INCH_TO_CM;
+            const d = vol._dims();
+            return Object.entries(d).map(([k, v]) =>
+                (SWEEP_PARAMS[k] || k) + ' ' + (v / IN).toFixed(2) + '"').join(' × ');
+        }
+
+        function generateReport() {
+            const model = Editor.getModel();
+            const IN = Geometry.INCH_TO_CM;
+            setStatus('Generating report...');
+
+            // Fresh calculation at every dose point (medium mesh)
+            const elements = model.meshAllSources(5, 8, 10);
+            const isotopeKey = model.getSourceIsotope();
+            const calcOpts = { includeAir: document.getElementById('includeAir').checked };
+            const rows = dosePoints.map(dp => {
+                const r = elements.length
+                    ? Physics.volumetricSourceDose(elements, isotopeKey,
+                        { x: dp.x, y: dp.y, z: dp.z }, model, calcOpts)
+                    : { total_mrem_hr: 0, total_mSv_hr: 0 };
+                return { dp, r };
+            });
+
+            const img = Scene.snapshot();
+            const pos = v => `(${(v.position.x / IN).toFixed(1)}, ${(v.position.y / IN).toFixed(1)}, ${(v.position.z / IN).toFixed(1)})`;
+            const esc = s => String(s || '').replace(/</g, '&lt;');
+
+            const sources = model.volumes.filter(v => v.role === 'source');
+            const shields = model.volumes.filter(v => v.role !== 'source');
+            const srcRows = sources.map(v =>
+                `<tr><td>${esc(v.label || v.id)}</td><td>${v._type()}</td><td>${esc(v.isotopeKey)}</td>` +
+                `<td>${v.activity_Ci || 0}</td><td>${esc(Materials.getMaterial(v.materialKey).name)}</td>` +
+                `<td>${dimsText(v)}</td><td>${pos(v)}</td><td>${v.enabled === false ? 'EXCLUDED' : 'yes'}</td></tr>`).join('');
+            const shRows = shields.map(v =>
+                `<tr><td>${esc(v.label || v.id)}</td><td>${v._type()}</td>` +
+                `<td>${esc(Materials.getMaterial(v.materialKey).name)}</td>` +
+                `<td>${dimsText(v)}</td><td>${pos(v)}</td><td>${v.enabled === false ? 'EXCLUDED' : 'yes'}</td></tr>`).join('');
+            const dpRows = rows.map(({ dp, r }) =>
+                `<tr><td>${esc(dp.name)}</td><td>(${(dp.x / IN).toFixed(1)}, ${(dp.y / IN).toFixed(1)}, ${(dp.z / IN).toFixed(1)})</td>` +
+                `<td><b>${Physics.formatDose(r.total_mrem_hr)}</b></td><td>${Physics.formatDoseSv(r.total_mSv_hr)}</td></tr>`).join('');
+
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>RadShield Report</title>
+<style>
+ body{font-family:Segoe UI,Arial,sans-serif;color:#1c2128;max-width:860px;margin:0 auto;padding:28px;font-size:14px;line-height:1.45;}
+ h1{color:#0d419d;border-bottom:3px solid #1f6feb;padding-bottom:6px;font-size:24px;}
+ h2{color:#0d419d;font-size:17px;margin-top:26px;}
+ table{border-collapse:collapse;width:100%;margin:8px 0;font-size:13px;}
+ th,td{border:1px solid #d0d7de;padding:5px 9px;text-align:left;}
+ th{background:#f6f8fa;}
+ img{max-width:100%;border:1px solid #d0d7de;border-radius:6px;margin:8px 0;}
+ .meta{color:#57606a;font-size:12px;}
+ .foot{color:#57606a;font-size:11px;margin-top:26px;border-top:1px solid #d0d7de;padding-top:8px;}
+ .noprint{margin:14px 0;} @media print{.noprint{display:none;}}
+</style></head><body>
+<h1>RadShield Dose Assessment Report</h1>
+<div class="meta">Generated ${new Date().toLocaleString()} &nbsp;•&nbsp; RadShield v0.5 &nbsp;•&nbsp;
+ point-kernel method with ANSI/ANS-6.4.3-1991 buildup factors &nbsp;•&nbsp;
+ air attenuation ${calcOpts.includeAir ? 'included' : 'excluded'}</div>
+<div class="noprint"><button onclick="window.print()" style="padding:8px 18px;font-size:14px;cursor:pointer;">Print / Save as PDF</button></div>
+<h2>Scene</h2>
+<img src="${img}" alt="3D scene">
+<h2>Dose Rate Results</h2>
+<table><tr><th>Dose Point</th><th>Position (in)</th><th>Dose Rate</th><th></th></tr>${dpRows}</table>
+<h2>Radioactive Sources (${sources.length})</h2>
+<table><tr><th>Name</th><th>Shape</th><th>Isotope</th><th>Ci</th><th>Material</th><th>Dimensions</th><th>Position (in)</th><th>In calc</th></tr>${srcRows}</table>
+<h2>Shielding &amp; Structures (${shields.length})</h2>
+<table><tr><th>Name</th><th>Shape</th><th>Material</th><th>Dimensions</th><th>Position (in)</th><th>In calc</th></tr>${shRows}</table>
+<div class="foot">Method: each source volume is meshed into point elements; each element is ray-traced through the
+3D geometry to the dose point; attenuation uses NIST XCOM coefficients and scattered radiation uses
+geometric-progression buildup factors per ANSI/ANS-6.4.3-1991 (exposure set, outermost-material method).
+Results are exposure-based (QF = 1). See the RadShield Design Document for approximations and limitations.</div>
+</body></html>`;
+
+            const w = window.open('', '_blank');
+            if (w) {
+                w.document.write(html);
+                w.document.close();
+                setStatus('Report opened in a new tab — use its Print button to save as PDF');
+            } else {
+                const blob = new Blob([html], { type: 'text/html' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'RadShield_Report.html';
+                a.click();
+                URL.revokeObjectURL(a.href);
+                setStatus('Report downloaded (popup was blocked) — open RadShield_Report.html');
+            }
         }
     </script>
 </body>

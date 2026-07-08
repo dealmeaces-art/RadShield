@@ -111,8 +111,11 @@ const Physics = (() => {
     // Calculate dose rate from a meshed volumetric source
     //
     // Parameters:
-    //   sourceElements: [{position: {x,y,z}, activity_Ci}]
-    //   isotopeKey: isotope identifier
+    //   sourceElements: [{position: {x,y,z}, activity_Ci, isotopeKey?}]
+    //       Elements meshed from source volumes carry their own isotopeKey,
+    //       so mixed-isotope scenes transport each source with its own
+    //       gamma lines.
+    //   isotopeKey: fallback isotope for elements without their own
     //   dosePos: {x, y, z} dose point position (cm)
     //   geometryModel: object with rayTrace(from, to) method that returns
     //                  [{materialKey, thickness_cm}]
@@ -129,7 +132,7 @@ const Physics = (() => {
 
             const result = pointSourceDose(
                 elem.activity_Ci,
-                isotopeKey,
+                elem.isotopeKey || isotopeKey,
                 elem.position,
                 dosePos,
                 shieldLayers,
@@ -259,24 +262,34 @@ const Physics = (() => {
     // Uses icosphere ray directions for uniform sampling, binary searches
     // along each ray to find target dose rate distance.
     //
+    // Ray fans are cast from EACH source's own center (one vantage per
+    // source), while the dose at every sample still sums ALL source
+    // elements. A single shared centroid misses the high-dose lobes around
+    // individual sources when sources are far apart: the first sample near
+    // the centroid reads below the level and the ray reports "no surface".
+    // Per-source vantages draw each lobe; overlapping surfaces from nearby
+    // sources simply draw on top of each other (visual union).
+    //
     // Parameters:
-    //   sourceElements: pre-meshed source elements (use coarse mesh)
+    //   sourceElements: pre-meshed source elements (all sources combined)
     //   isotopeKey: isotope identifier
     //   geometryModel: SceneModel with rayTrace()
-    //   center: {x,y,z} center of ray-casting (source centroid)
+    //   centers: [{x,y,z}] ray-cast vantage per source (single object ok)
     //   levels: [{value_mrem_hr, color, label}]
     //   options: {includeAir, subdivisions, minDist, maxDist, searchSteps}
     //   onProgress: callback(fraction) for progress updates
     //
-    // Returns: [{level, points, faces}]
+    // Returns: [{level, center, points, faces}] — one entry per
+    //          (level x center) pair that produced any points
     // -----------------------------------------------------------------------
-    function generateIsodoseSurfaces(sourceElements, isotopeKey, geometryModel, center, levels, options, onProgress) {
+    function generateIsodoseSurfaces(sourceElements, isotopeKey, geometryModel, centers, levels, options, onProgress) {
         const includeAir = options.includeAir !== undefined ? options.includeAir : true;
         const subdivisions = options.subdivisions || 3;
         const minDist = options.minDist || 1;
         const maxDist = options.maxDist || 2000;
         const searchSteps = options.searchSteps || 12;
         const calcOpts = { includeAir: includeAir };
+        const centerList = Array.isArray(centers) ? centers : [centers];
 
         // Generate icosphere for uniform ray directions + triangulation
         const ico = createIcosphere(subdivisions);
@@ -286,35 +299,53 @@ const Physics = (() => {
         // Sort levels highest to lowest
         const sortedLevels = levels.slice().sort((a, b) => b.value_mrem_hr - a.value_mrem_hr);
 
-        // Calculate dose at a point along a ray direction
-        function doseAtDistance(dir, dist) {
-            const dosePos = {
-                x: center.x + dir.x * dist,
-                y: center.y + dir.y * dist,
-                z: center.z + dir.z * dist
-            };
+        // True dose at a world point: every element with its own isotope,
+        // ray-traced shielding
+        function doseAtPoint(dosePos) {
             let total = 0;
             for (const elem of sourceElements) {
                 const layers = geometryModel.rayTrace(elem.position, dosePos);
-                total += pointSourceDose(elem.activity_Ci, isotopeKey, elem.position, dosePos, layers, calcOpts).total_mrem_hr;
+                total += pointSourceDose(elem.activity_Ci, elem.isotopeKey || isotopeKey,
+                    elem.position, dosePos, layers, calcOpts).total_mrem_hr;
             }
             return total;
         }
 
-        // Binary search for the distance where dose = target
-        function findIsodoseDistance(dir, targetDose) {
+        function doseAtDistance(center, dir, dist) {
+            return doseAtPoint({
+                x: center.x + dir.x * dist,
+                y: center.y + dir.y * dist,
+                z: center.z + dir.z * dist
+            });
+        }
+
+        // Find the distance where the dose first falls to the target level:
+        // march outward (x1.5 per step) until the dose first drops below the
+        // target, then bisect inside that bracket. Taking the FIRST crossing
+        // keeps each vantage's surface to its own lobe — a plain lo/hi
+        // bisection over [min, max] could tunnel through a low-dose corridor
+        // and land on the far side of ANOTHER source's lobe, drawing spikes
+        // between separated sources.
+        function findIsodoseDistance(center, dir, targetDose) {
+            if (doseAtDistance(center, dir, minDist) < targetDose) return -1;
+
             let lo = minDist;
-            let hi = maxDist;
-
-            const doseAtMin = doseAtDistance(dir, lo);
-            if (doseAtMin < targetDose) return -1;
-
-            const doseAtMax = doseAtDistance(dir, hi);
-            if (doseAtMax > targetDose) return maxDist;
+            let hi = -1;
+            for (let d = minDist * 1.5; ; d *= 1.5) {
+                if (d >= maxDist) {
+                    if (doseAtDistance(center, dir, maxDist) > targetDose) {
+                        return maxDist;  // surface beyond search range
+                    }
+                    hi = maxDist;
+                    break;
+                }
+                if (doseAtDistance(center, dir, d) < targetDose) { hi = d; break; }
+                lo = d;
+            }
 
             for (let step = 0; step < searchSteps; step++) {
                 const mid = (lo + hi) / 2;
-                if (doseAtDistance(dir, mid) > targetDose) {
+                if (doseAtDistance(center, dir, mid) > targetDose) {
                     lo = mid;
                 } else {
                     hi = mid;
@@ -323,42 +354,44 @@ const Physics = (() => {
             return (lo + hi) / 2;
         }
 
-        // Generate surface for each level
+        // Generate one surface per (level x source vantage)
         const results = [];
-        const totalWork = directions.length * sortedLevels.length;
+        const totalWork = directions.length * sortedLevels.length * centerList.length;
         let workDone = 0;
 
         for (const level of sortedLevels) {
-            const points = [];
+            for (const center of centerList) {
+                const points = [];
 
-            for (let di = 0; di < directions.length; di++) {
-                const dist = findIsodoseDistance(directions[di], level.value_mrem_hr);
+                for (let di = 0; di < directions.length; di++) {
+                    const dist = findIsodoseDistance(center, directions[di], level.value_mrem_hr);
 
-                if (dist > 0) {
-                    points.push({
-                        x: center.x + directions[di].x * dist,
-                        y: center.y + directions[di].y * dist,
-                        z: center.z + directions[di].z * dist
-                    });
-                } else {
-                    points.push(null);
+                    if (dist > 0) {
+                        points.push({
+                            x: center.x + directions[di].x * dist,
+                            y: center.y + directions[di].y * dist,
+                            z: center.z + directions[di].z * dist
+                        });
+                    } else {
+                        points.push(null);
+                    }
+
+                    workDone++;
+                    if (onProgress && workDone % 10 === 0) {
+                        onProgress(workDone / totalWork);
+                    }
                 }
 
-                workDone++;
-                if (onProgress && workDone % 10 === 0) {
-                    onProgress(workDone / totalWork);
+                // Use icosphere faces directly — skip faces with null vertices
+                const faces = [];
+                for (const f of icoFaces) {
+                    if (points[f.a] && points[f.b] && points[f.c]) {
+                        faces.push({ a: f.a, b: f.b, c: f.c });
+                    }
                 }
+
+                results.push({ level, center, points, faces });
             }
-
-            // Use icosphere faces directly — filter out faces with null vertices
-            const faces = [];
-            for (const f of icoFaces) {
-                if (points[f.a] && points[f.b] && points[f.c]) {
-                    faces.push({ a: f.a, b: f.b, c: f.c });
-                }
-            }
-
-            results.push({ level, points, faces });
         }
 
         if (onProgress) onProgress(1);

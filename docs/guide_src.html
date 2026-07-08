@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RadShield User Guide</title>
+<style>
+    :root {
+        --accent: #1f6feb;
+        --accent-dark: #0d419d;
+        --ink: #1c2128;
+        --muted: #57606a;
+        --line: #d0d7de;
+        --bg-soft: #f6f8fa;
+        --tip: #dafbe1; --tip-edge: #1a7f37;
+        --warn: #fff8c5; --warn-edge: #9a6700;
+        --note: #ddf4ff; --note-edge: #0969da;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: "Segoe UI", -apple-system, Roboto, Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: #ffffff;
+        line-height: 1.55;
+        font-size: 16px;
+    }
+    .page { max-width: 920px; margin: 0 auto; padding: 0 28px 80px; }
+
+    /* ---- Cover ---- */
+    .cover {
+        border-bottom: 4px solid var(--accent);
+        padding: 64px 0 36px;
+        margin-bottom: 8px;
+    }
+    .cover .product { font-size: 44px; font-weight: 800; letter-spacing: -1px; color: var(--accent-dark); }
+    .cover .doctitle { font-size: 26px; font-weight: 300; color: var(--ink); margin-top: 2px; }
+    .cover .meta { margin-top: 18px; color: var(--muted); font-size: 14px; }
+    .cover .blurb { margin-top: 22px; max-width: 700px; font-size: 17px; color: #333c45; }
+
+    /* ---- TOC ---- */
+    .toc { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: 24px 30px; margin: 34px 0 10px; }
+    .toc h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 12px; border: none; padding: 0; }
+    .toc ol { list-style: none; column-count: 2; column-gap: 40px; }
+    .toc li { margin: 5px 0; break-inside: avoid; }
+    .toc a { color: var(--accent-dark); text-decoration: none; font-weight: 600; font-size: 15px; }
+    .toc a:hover { text-decoration: underline; }
+    .toc .n { display: inline-block; min-width: 26px; color: var(--accent); }
+
+    /* ---- Headings ---- */
+    h1.chapter {
+        font-size: 30px; font-weight: 800; color: var(--accent-dark);
+        margin: 64px 0 6px; padding-top: 18px; border-top: 3px solid var(--accent);
+    }
+    h1.chapter .cnum { color: var(--accent); margin-right: 10px; }
+    h2 { font-size: 21px; font-weight: 700; margin: 36px 0 10px; color: var(--ink); }
+    h3 { font-size: 17px; font-weight: 700; margin: 26px 0 8px; color: var(--ink); }
+    p { margin: 10px 0; }
+    .lead { font-size: 17px; color: #333c45; }
+
+    /* ---- Procedures ---- */
+    .procedure {
+        border: 1px solid var(--line); border-left: 4px solid var(--accent);
+        border-radius: 8px; background: #fff;
+        margin: 18px 0; padding: 16px 22px 14px;
+    }
+    .procedure .ptitle {
+        font-weight: 700; font-size: 15px; color: var(--accent-dark);
+        text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px;
+    }
+    .procedure ol { counter-reset: step; list-style: none; }
+    .procedure ol li {
+        counter-increment: step; position: relative;
+        padding: 6px 0 6px 46px; margin: 0;
+    }
+    .procedure ol li::before {
+        content: counter(step);
+        position: absolute; left: 0; top: 6px;
+        width: 30px; height: 30px; border-radius: 50%;
+        background: var(--accent); color: #fff;
+        font-weight: 700; font-size: 15px;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .procedure ol li + li { border-top: 1px dashed #e4e9ee; }
+
+    /* ---- Figures ---- */
+    figure { margin: 22px 0 26px; }
+    figure img {
+        width: 100%; height: auto; display: block;
+        border: 1px solid var(--line); border-radius: 8px;
+        box-shadow: 0 3px 14px rgba(27, 31, 36, 0.12);
+    }
+    figcaption {
+        margin-top: 9px; font-size: 14px; color: var(--muted);
+        padding-left: 4px;
+    }
+    figcaption b { color: var(--accent-dark); }
+
+    /* ---- Callouts ---- */
+    .tip, .warn, .note {
+        border-radius: 8px; padding: 12px 16px 12px 46px; margin: 14px 0;
+        position: relative; font-size: 15px;
+    }
+    .tip::before, .warn::before, .note::before {
+        position: absolute; left: 14px; top: 11px; font-size: 17px;
+    }
+    .tip  { background: var(--tip);  border: 1px solid #b4e6c4; } .tip::before  { content: "💡"; }
+    .warn { background: var(--warn); border: 1px solid #ecd98a; } .warn::before { content: "⚠️"; }
+    .note { background: var(--note); border: 1px solid #a8d4f5; } .note::before { content: "ℹ️"; }
+    .tip b:first-child, .warn b:first-child, .note b:first-child { display: inline; }
+
+    /* ---- Tables ---- */
+    table { border-collapse: collapse; width: 100%; margin: 14px 0 18px; font-size: 15px; }
+    th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+    th { background: var(--bg-soft); font-weight: 700; }
+    tr:nth-child(even) td { background: #fbfcfd; }
+
+    /* ---- Inline UI elements ---- */
+    .ui { /* a button/label the user clicks */
+        display: inline-block; background: var(--bg-soft);
+        border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px;
+        padding: 0 7px; font-size: 14px; font-weight: 600; white-space: nowrap;
+    }
+    .key {
+        display: inline-block; background: #fff; border: 1px solid #afb8c1;
+        border-bottom: 2px solid #afb8c1; border-radius: 5px;
+        padding: 0 6px; font: 600 13px/20px Consolas, monospace;
+    }
+    code { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 14px; }
+
+    ul.plain { margin: 8px 0 8px 24px; }
+    ul.plain li { margin: 5px 0; }
+
+    /* ---- Print ---- */
+    @media print {
+        body { font-size: 11.5pt; }
+        .page { max-width: none; padding: 0; }
+        h1.chapter { page-break-before: always; margin-top: 0; }
+        .cover + .toc, h1#ch1 { page-break-before: avoid; }
+        figure, .procedure, table, .tip, .warn, .note { page-break-inside: avoid; }
+        figure img { box-shadow: none; }
+        a { color: var(--accent-dark); text-decoration: none; }
+    }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ================= COVER ================= -->
+<div class="cover">
+    <div class="product">RadShield</div>
+    <div class="doctitle">User Guide</div>
+    <div class="meta">Version 0.5 &nbsp;•&nbsp; July 2026 &nbsp;•&nbsp; for <code>RadShield_Portable_v5.html</code></div>
+    <p class="blurb">RadShield is a gamma dose-rate calculator that runs entirely in your web browser.
+    You build a 3D model of your radioactive sources and shielding, place a dose point, and RadShield
+    computes the dose rate by point-kernel integration with ANSI/ANS-6.4.3 buildup factors.
+    This guide walks through every feature click by click. Every screenshot was captured from the
+    actual program.</p>
+</div>
+
+<!-- ================= TOC ================= -->
+<div class="toc">
+<h2>Contents</h2>
+<ol>
+    <li><span class="n">1</span><a href="#ch1">Getting started</a></li>
+    <li><span class="n">2</span><a href="#ch2">A tour of the screen</a></li>
+    <li><span class="n">3</span><a href="#ch3">Quick start: your first dose calculation</a></li>
+    <li><span class="n">4</span><a href="#ch4">Building custom geometry</a></li>
+    <li><span class="n">5</span><a href="#ch5">Positioning with Relationships</a></li>
+    <li><span class="n">6</span><a href="#ch6">Measuring distances</a></li>
+    <li><span class="n">7</span><a href="#ch7">Controlling what is calculated</a></li>
+    <li><span class="n">8</span><a href="#ch8">Isodose maps of the radiation field</a></li>
+    <li><span class="n">9</span><a href="#ch9">Survey heat map &amp; parameter sweep</a></li>
+    <li><span class="n">10</span><a href="#ch10">Time simulation: transfers, discharges &amp; spills</a></li>
+    <li><span class="n">11</span><a href="#ch11">The Pipe / Hose Builder</a></li>
+    <li><span class="n">12</span><a href="#ch12">Saving, loading &amp; reports</a></li>
+    <li><span class="n">13</span><a href="#ch13">Worked examples</a></li>
+    <li><span class="n">14</span><a href="#ch14">Reference: shortcuts &amp; troubleshooting</a></li>
+</ol>
+</div>
+
+<!-- ================= CH 1 ================= -->
+<h1 class="chapter" id="ch1"><span class="cnum">1</span>Getting started</h1>
+
+<p class="lead">RadShield is one file. There is nothing to install.</p>
+
+<div class="procedure"><div class="ptitle">To run RadShield</div>
+<ol>
+    <li>Copy <code>RadShield_Portable_v5.html</code> anywhere — desktop, USB stick, network share.</li>
+    <li>Double-click it. It opens in your default browser (Edge, Chrome, and Firefox all work) and runs completely offline.</li>
+</ol>
+</div>
+
+<p>Two conventions used everywhere in the program and in this guide:</p>
+<ul class="plain">
+    <li><b>Y is up.</b> Positions are X / Y / Z in <b>inches</b>; Y is height above the floor grid.</li>
+    <li>An object's position is its <b>bottom center</b> — set Y&nbsp;=&nbsp;0 and the object sits on the floor.</li>
+</ul>
+
+<div class="note"><b>Physics documentation.</b> This guide covers <i>operating</i> the program. How the numbers
+are computed — the point-kernel equations, attenuation data, buildup factors, and the approximations —
+is documented separately in <code>docs/DESIGN.md</code>.</div>
+
+<!-- ================= CH 2 ================= -->
+<h1 class="chapter" id="ch2"><span class="cnum">2</span>A tour of the screen</h1>
+
+<figure>
+    <img src="images/01_overview.png" alt="Annotated overview of the RadShield window">
+    <figcaption><b>Figure 2-1.</b> The RadShield window with each region numbered. The numbers match the table below.</figcaption>
+</figure>
+
+<table>
+<tr><th style="width:36px">#</th><th style="width:210px">Region</th><th>What it does</th></tr>
+<tr><td>1</td><td><span class="ui">New</span> / <span class="ui">Save</span> / <span class="ui">Load</span> / <span class="ui">Report</span></td>
+    <td>Clear the scene; save everything to a <code>.json</code> file; load a saved file; generate a printable dose-assessment report. See chapter 12.</td></tr>
+<tr><td>2</td><td>Sidebar tabs</td>
+    <td>The sidebar has three workspaces: <b>Model</b> (build and edit the scene — outliner, properties, insert, tank template),
+    <b>Analyze</b> (dose points, calculation settings, isodose, survey heat map, parameter sweep),
+    and <b>Simulate</b> (time simulations: transfers, discharges, spills).</td></tr>
+<tr><td>3</td><td><b>Scene Objects</b> list</td>
+    <td>Every object in the scene: material color dot, name, role badge (<b>SRC</b> source / <b>SHLD</b> shield / <b>TANK</b> tank part),
+    a green <b>calculation checkbox</b>, and a visibility eye. Click a row to select that object.
+    The tank template form lives below it on the Model tab.</td></tr>
+<tr><td>4</td><td>Ribbon — <b>Mode</b></td>
+    <td><span class="ui">Select</span> <span class="key">V</span>, <span class="ui">Move</span> <span class="key">G</span>, <span class="ui">Rotate</span> <span class="key">R</span> — what your mouse does in the 3D view.</td></tr>
+<tr><td>5</td><td>Ribbon — <b>Inspect</b></td>
+    <td><span class="ui">Smart Dim</span> <span class="key">S</span>, <span class="ui">Measure</span> <span class="key">M</span>, <span class="ui">Dose Pt</span> <span class="key">D</span>.</td></tr>
+<tr><td>6</td><td>Ribbon — <b>Relationships</b></td>
+    <td>Six snap operations that place one object precisely against another. See chapter 5.</td></tr>
+<tr><td>7</td><td>Ribbon — <b>Insert</b></td>
+    <td>One-click Box, Plate, Cylinder, Sphere at the origin.</td></tr>
+<tr><td>8</td><td>Status line</td><td>One-line feedback about the last action.</td></tr>
+<tr><td>9</td><td><b>How-to bar</b></td>
+    <td>Always explains the active tool. During a Relationship it shows Step&nbsp;1&nbsp;/&nbsp;Step&nbsp;2 instructions. When in doubt, read this bar.</td></tr>
+</table>
+
+<h2>Camera controls (work in every mode)</h2>
+<table>
+<tr><th>Action</th><th>Mouse</th></tr>
+<tr><td>Orbit around the scene</td><td>Hold <b>left button</b> and drag</td></tr>
+<tr><td>Pan (slide sideways)</td><td>Hold <b>right button</b> and drag</td></tr>
+<tr><td>Zoom</td><td>Scroll wheel</td></tr>
+<tr><td>Refit everything in view</td><td><span class="ui">Re-frame 3D View</span> button at the bottom of the sidebar</td></tr>
+</table>
+
+<div class="tip"><b>Hover for help.</b> Nearly every button and field has a tooltip — rest the mouse on it for a second.
+The how-to bar at the bottom always describes the active tool.</div>
+
+<!-- ================= CH 3 ================= -->
+<h1 class="chapter" id="ch3"><span class="cnum">3</span>Quick start: your first dose calculation</h1>
+
+<p class="lead">The fastest route to a dose number: generate a shielded tank from the template form,
+place a dose point, press Calculate. Five minutes, start to finish.</p>
+
+<h2>3.1&nbsp; Configure and build the tank</h2>
+
+<div class="procedure"><div class="ptitle">Procedure — build a tank from the template</div>
+<ol>
+    <li>In <b>Tank Dimensions</b>, enter the inner radius and inner height of the tank cavity.
+        Example used in the figures: <b>18"</b> radius, <b>40"</b> tall.</li>
+    <li>In <b>Wall Layers (inside → out)</b>, define the wall build-up, one row per material layer.
+        Example: <b>0.5" Steel</b>, then <b>2" Lead</b>. Use <span class="ui">+ Add Wall Layer</span> for more layers;
+        the <b>×</b> deletes a row.</li>
+    <li>In <b>Floor</b>, define the layers under the tank (example: <b>1" Steel</b>).</li>
+    <li>In <b>Lid Configuration</b>, choose lid material and thickness. If the lid has an access hole, set
+        <b>Opening Radius</b> &gt; 0 and optionally check <b>Plug installed</b> with the plug's material and thickness
+        (the plug fills the opening).</li>
+    <li>In <b>Radioactive Source</b>, pick the <b>Isotope</b> and total <b>Activity</b> in curies, and set the
+        <b>Liquid Level</b> (water depth from the tank floor).</li>
+    <li>Choose the <b>Distribution</b> — where the activity is within the liquid:<br>
+        • <b>Uniform (mixed)</b> — spread through all the liquid.<br>
+        • <b>Settled (sludge on bottom)</b> — all activity in a thin layer on the floor; set <b>Sludge Thickness</b>.
+          The clean water above acts as shielding.<br>
+        • <b>Custom layer</b> — you choose the source layer height.</li>
+    <li>Press <span class="ui">Build / Rebuild Tank</span>. The tank appears in the 3D view and its parts
+        appear in Scene Objects.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/02_tank_built.png" alt="Tank built from the template">
+    <figcaption><b>Figure 3-1.</b> The example tank: 18"&nbsp;×&nbsp;40", steel + lead walls, 25&nbsp;Ci of Co-60 settled
+    into a 2" sludge layer (orange disk at the bottom), 30" of clean water above it (blue), steel lid with plug.</figcaption>
+</figure>
+
+<div class="note"><b>Rebuild is safe.</b> <span class="ui">Build / Rebuild Tank</span> replaces only the
+tank-template parts (walls, floor, lid, plug, source liquid). Objects you added yourself are kept.</div>
+
+<h2>3.2&nbsp; Place your dose points</h2>
+
+<p><b>Dose points</b> — the red markers — are the locations where the dose rate is evaluated
+(where the worker stands, where the survey meter reads). You can have as many as you want,
+each with a name, and every calculation reports all of them at once.</p>
+
+<div class="procedure"><div class="ptitle">Procedure — set up named dose points</div>
+<ol>
+    <li>Switch the sidebar to the <span class="ui">Analyze</span> tab. The <b>Dose Points</b> panel is at the top.</li>
+    <li>Name the first point after its location — e.g. <b>Tank Wall</b> — and type its X / Y / Z
+        (inches; Y is up; the tank template is centered on the origin at floor level).</li>
+    <li><b>Or</b> click that point's <span class="ui">🎯 Pick</span> button and then click anywhere in the
+        3D view — an object surface or the floor — to place it by eye.</li>
+    <li>Click <span class="ui">+ Add Dose Point</span> for each additional location — e.g. an
+        <b>Operator</b> position a few feet back. The <span class="key">D</span> key also enters pick mode
+        for the most recently picked point.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/03_dose_points.png" alt="Two named dose points beside the tank">
+    <figcaption><b>Figure 3-2.</b> Two named dose points: "Tank Wall" at (36", 30", 0") and "Operator"
+    further back. Each red marker carries its name in the 3D view.</figcaption>
+</figure>
+
+<h2>3.3&nbsp; Calculate</h2>
+
+<div class="procedure"><div class="ptitle">Procedure — run the calculation</div>
+<ol>
+    <li>(Optional) In <b>Calculation Settings</b> (Analyze tab), pick a <b>Mesh Density</b>. Finer = more
+        accurate close to the source, slower. <b>Medium</b> is right for most work.</li>
+    <li>Press <span class="ui">Calculate Dose Rate</span>. The source is subdivided into hundreds of point
+        elements, and every element is ray-traced through every shield layer to <b>every</b> dose point.</li>
+    <li>Read the results overlay (next section). Each marker in the 3D view also shows its own dose rate.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/04_results.png" alt="Dose rate results table">
+    <figcaption><b>Figure 3-3.</b> Results for the example tank at both dose points. With more than one
+    point the results appear as a table; a single point gets the large card layout.</figcaption>
+</figure>
+
+<h2>3.4&nbsp; Reading the results</h2>
+
+<table>
+<tr><th style="width:230px">Column / card</th><th>Meaning</th></tr>
+<tr><td><b>Dose Rate</b></td>
+    <td>The answer per dose point, in mrem/hr with mSv/hr alongside (swap the primary with the <b>Units</b> setting).
+    Color: green &lt; 5, amber 5–100, red &gt; 100 mrem/hr.</td></tr>
+<tr><td><b>Unshielded</b></td>
+    <td>Sanity check: the same sources as bare point sources at the same distances, from the isotope's
+    gamma-ray constant, with no shielding at all. Summed per source, each with its own isotope.</td></tr>
+<tr><td><b>Shield Factor</b></td>
+    <td>Unshielded ÷ calculated — how much the shielding is buying you. If this looks absurd
+    (0.5×, or 10⁹×), inspect the geometry before trusting anything.</td></tr>
+<tr><td>Footer line</td>
+    <td>How many source elements were integrated, runtime, total activity.</td></tr>
+</table>
+
+<div class="warn"><b>Include air attenuation</b> (Calculation Settings) is on by default. It matters little
+at a few feet but becomes significant at long range. Leave it on unless you are comparing against a code
+that excludes it.</div>
+
+<!-- ================= CH 4 ================= -->
+<h1 class="chapter" id="ch4"><span class="cnum">4</span>Building custom geometry</h1>
+
+<p class="lead">Everything in the scene is an object you can create, move, rotate, resize, re-material,
+duplicate, and delete. The tank template is just a starting point — you can also start from an empty scene
+(<span class="ui">New</span>).</p>
+
+<h2>4.1&nbsp; Inserting shapes</h2>
+
+<div class="procedure"><div class="ptitle">Procedure — insert a shape (three equivalent ways)</div>
+<ol>
+    <li><b>Ribbon → Insert:</b> click <span class="ui">Box</span>, <span class="ui">Plate</span>,
+        <span class="ui">Cylinder</span>, or <span class="ui">Sphere</span>. The shape appears at the origin, selected.</li>
+    <li><b>Sidebar → Insert panel:</b> same shapes plus <span class="ui">+ Disk</span>,
+        <span class="ui">+ Annulus</span> (hollow cylinder / pipe section), and the orange
+        <span class="ui">+ Source</span> / <span class="ui">+ Source Ball</span> buttons which insert ready-made sources.</li>
+    <li><b>Right-click empty space in the 3D view</b> → "Add at this point" — the shape spawns where you clicked.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/06_insert_box.png" alt="A box inserted into an empty scene">
+    <figcaption><b>Figure 4-1.</b> A fresh 12" box. It spawns selected: its properties fill the
+    <b>Selected Object</b> panel, and the status line points you at the two ways to resize it.</figcaption>
+</figure>
+
+<table>
+<tr><th>Shape</th><th>Dimensions</th><th>Typical use</th></tr>
+<tr><td><b>Box / Cube</b></td><td>Width (X), Height (Y), Depth (Z)</td><td>Shield blocks, containers, room features</td></tr>
+<tr><td><b>Plate / Wall</b></td><td>Thin box, 24 × 24 × 0.5" default</td><td>Shield panels; rotate 90° to make a wall</td></tr>
+<tr><td><b>Cylinder</b></td><td>Radius, Height</td><td>Tanks, bottles, plugs, columns</td></tr>
+<tr><td><b>Disk</b></td><td>Radius, Thickness</td><td>Flat plates, lids, filter beds</td></tr>
+<tr><td><b>Annulus</b></td><td>Inner radius, Outer radius, Height</td><td>Pipe walls, tank wall sections</td></tr>
+<tr><td><b>Sphere</b></td><td>Radius</td><td>Collection bulbs, compact sources</td></tr>
+</table>
+
+<div class="note"><b>Everything inserts as a steel shield</b> except the orange Source buttons.
+That's deliberate — an accidental extra shield is harmless, an accidental extra source would silently
+inflate every result. Any shape can be converted to a source afterward (§4.4).</div>
+
+<h2>4.2&nbsp; Resizing — two ways</h2>
+
+<p>Object dimensions are edited numerically (the Move/Rotate gizmo never stretches geometry).</p>
+
+<div class="procedure"><div class="ptitle">Procedure — Smart Dimension (the fast way)</div>
+<ol>
+    <li>Press <span class="key">S</span> or click <span class="ui">Smart Dim</span> in the ribbon.</li>
+    <li>Click any object in the 3D view. A popup opens at your cursor with exactly that object's dimensions.</li>
+    <li>Type new values — each applies the moment you leave the field (and is undoable with <span class="key">Ctrl+Z</span>).</li>
+    <li>Click another object to edit it next, or press <span class="key">Esc</span> to close.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/07_smart_dimension.png" alt="Smart Dimension popup on a box">
+    <figcaption><b>Figure 4-2.</b> Smart Dimension on a box: Width / Height / Depth right at the cursor.
+    The same fields are always in the <b>Selected Object</b> panel on the left, along with position and rotation.</figcaption>
+</figure>
+
+<h2>4.3&nbsp; Moving and rotating</h2>
+
+<table>
+<tr><th style="width:170px">Tool</th><th>How it works</th></tr>
+<tr><td><span class="ui">Move</span> <span class="key">G</span></td>
+    <td>Drag the <b>red / green / blue arrows</b> (X / Y / Z; green is up). Snaps to ¼".</td></tr>
+<tr><td><span class="ui">Rotate</span> <span class="key">R</span></td>
+    <td>Drag the colored rings. Snaps to 15°.</td></tr>
+<tr><td>Exact values</td>
+    <td>Type into <b>X / Y (bottom) / Z</b> and <b>Rot X / Y / Z</b> in the Selected Object panel.</td></tr>
+</table>
+
+<h2>4.4&nbsp; Making an object radioactive (assigning activity)</h2>
+
+<div class="procedure"><div class="ptitle">Procedure — turn any shape into a source</div>
+<ol>
+    <li>Right-click the object and choose <b>Make Source (radioactive)</b> — or select it and set
+        <b>Role</b> to <b>Source</b> in the Selected Object panel.</li>
+    <li>Two new fields appear in the panel: choose the <b>Isotope</b> (Co-60, Cs-137, Ir-192, I-131, Na-24)
+        and enter the <b>Activity</b> in curies.</li>
+    <li>Set the <b>Material</b> to what the source physically is — e.g. Water for tank liquid or wet sludge.
+        This is the self-shielding medium <i>inside</i> the source and it participates in the attenuation.</li>
+    <li>Confirm the object now shows the orange <b>SRC</b> badge in Scene Objects.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/08_context_menu.png" alt="Right-click context menu">
+    <figcaption><b>Figure 4-3.</b> The right-click menu: Duplicate, Delete, Exclude from calculation,
+    Make Source / Make Shield, and a one-click material picker.</figcaption>
+</figure>
+
+<figure>
+    <img src="images/09_source_properties.png" alt="Source properties in the Selected Object panel">
+    <figcaption><b>Figure 4-4.</b> The box converted to a 5&nbsp;Ci Cs-137 water-filled source named "Sludge Box".
+    Role, Isotope, Activity, and Material all live in the Selected Object panel.</figcaption>
+</figure>
+
+<div class="tip"><b>Mixed isotopes are fine.</b> A Co-60 tank and a Cs-137 bottle can share a scene —
+every source is transported with its own gamma lines and the results add correctly.</div>
+
+<h2>4.5&nbsp; Overlapping shapes — the Priority rule</h2>
+
+<p>Shapes are allowed to overlap; that's how composite geometry is modeled. Where two objects occupy the
+same space, the one with the <b>higher Priority</b> (bottom of the Selected Object panel) decides the
+material at that point. Examples from the tank template: the plug (priority 55) wins inside the lid opening
+(lid 50); the sludge source (20) wins inside the water column (10).</p>
+
+<div class="warn"><b>If an overlap behaves wrongly</b> — e.g. a source you embedded in a tank seems to be
+"seeing" water instead of its own material — check the Priority fields first. The inner, more specific object
+needs the higher number.</div>
+
+<h2>4.6&nbsp; Duplicate, delete, undo</h2>
+<ul class="plain">
+    <li><span class="key">Ctrl+D</span> or right-click → Duplicate: copies the object 6" over in X.</li>
+    <li><span class="key">Del</span> or right-click → Delete.</li>
+    <li><span class="key">Ctrl+Z</span> / <span class="key">Ctrl+Y</span>: undo / redo — 50 levels, covers every edit including deletes and New.</li>
+</ul>
+
+<!-- ================= CH 5 ================= -->
+<h1 class="chapter" id="ch5"><span class="cnum">5</span>Positioning with Relationships</h1>
+
+<p class="lead">The <b>Relationships</b> ribbon group snaps one object into an exact pose relative to
+another — the same idea as assembly relationships in SolidEdge. No eyeballing with the Move arrows.</p>
+
+<div class="procedure"><div class="ptitle">Procedure — apply a relationship</div>
+<ol>
+    <li>Click a relationship button in the ribbon (it highlights; the how-to bar starts walking you through).</li>
+    <li>Click the object you want to <b>move</b> — in the 3D view or in the Scene Objects list.
+        <i>Shortcut: if the right object is already selected, this step is skipped automatically.</i></li>
+    <li>Click the <b>target</b> object. The mover snaps into place. <span class="key">Esc</span> cancels at any point.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/10_mate_step.png" alt="Relationship in progress, help bar shows step 2">
+    <figcaption><b>Figure 5-1.</b> "On Top" in progress with the Lead Cover plate pre-selected — the how-to bar
+    (bottom) says exactly what to click next and what the relationship will do.</figcaption>
+</figure>
+
+<figure>
+    <img src="images/11_mate_done.png" alt="Plate mated on top of the box">
+    <figcaption><b>Figure 5-2.</b> After the mate: the plate snapped flush onto the source box, centered,
+    and the status line records "Place on top (flush faces): Lead Cover → Sludge Box".</figcaption>
+</figure>
+
+<table>
+<tr><th style="width:150px">Relationship</th><th>Result (mover relative to target)</th></tr>
+<tr><td><b>Concentric</b></td><td>Shares the target's axis; keeps its own height along that axis.</td></tr>
+<tr><td><b>On Top</b></td><td>Bottom face sits flush on the target's top face, centered on the axis.</td></tr>
+<tr><td><b>Beneath</b></td><td>Flush against the target's underside, centered.</td></tr>
+<tr><td><b>Flush</b></td><td>Both bottom faces on the same plane; sideways offset kept.</td></tr>
+<tr><td><b>Center In</b></td><td>Centered inside the target — e.g. a source centered in a container.</td></tr>
+<tr><td><b>Parallel</b></td><td>Orientation matched to the target; position unchanged.</td></tr>
+</table>
+
+<div class="note"><b>Relationships are one-shot snaps</b>, not persistent constraints. If you later move the
+target, the mover does not follow — re-apply the relationship. The same operations are also available by
+selecting the mover, right-clicking the target, and using the <b>Align … to this</b> submenu.</div>
+
+<!-- ================= CH 6 ================= -->
+<h1 class="chapter" id="ch6"><span class="cnum">6</span>Measuring distances</h1>
+
+<div class="procedure"><div class="ptitle">Procedure — measure between two points</div>
+<ol>
+    <li>Press <span class="key">M</span> or click <span class="ui">Measure</span> in the ribbon.</li>
+    <li>Click the first point — any object surface, or the floor grid.</li>
+    <li>Click the second point. A line and label appear with the <b>total distance</b> (inches and feet)
+        and the <b>ΔX / ΔY / ΔZ</b> components. The status line repeats the numbers with both endpoint coordinates.</li>
+    <li>Click again to start the next measurement; <span class="key">Esc</span> exits and clears the graphics.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/12_measure.png" alt="Measurement between two points">
+    <figcaption><b>Figure 6-1.</b> A measurement: 53.89" (4.49 ft) total, with the per-axis deltas on the label
+    and full endpoint coordinates in the status line.</figcaption>
+</figure>
+
+<!-- ================= CH 7 ================= -->
+<h1 class="chapter" id="ch7"><span class="cnum">7</span>Controlling what is calculated</h1>
+
+<h2>7.1&nbsp; Two different toggles on every object</h2>
+
+<p>Each row in Scene Objects has two independent switches — the distinction matters:</p>
+
+<table>
+<tr><th style="width:190px">Toggle</th><th>Effect</th></tr>
+<tr><td>The <b>eye</b> 👁</td>
+    <td><b>Visibility only.</b> A hidden object is still fully present in the physics. Use it to unclutter the view.</td></tr>
+<tr><td>The <b>green checkbox</b></td>
+    <td><b>The physics.</b> Unchecked, the object contributes <i>nothing</i>: no attenuation, no source activity,
+    no material. It draws as a faint ghost labeled "(excluded)" and its row is struck through.</td></tr>
+</table>
+
+<figure>
+    <img src="images/13_calc_exclude.png" alt="Object excluded from the calculation, drawn ghosted">
+    <figcaption><b>Figure 7-1.</b> The Lead Cover unchecked: ghosted in the 3D view, struck through in the list,
+    ignored by every calculation. One click restores it.</figcaption>
+</figure>
+
+<h2>7.2&nbsp; Instant what-if comparisons</h2>
+
+<div class="procedure"><div class="ptitle">Procedure — "what is this shield worth?"</div>
+<ol>
+    <li>Press <span class="ui">Calculate Dose Rate</span> with the object <b>enabled</b>. Note the result.</li>
+    <li>Uncheck the object's green box in Scene Objects.</li>
+    <li>Press <span class="ui">Calculate Dose Rate</span> again.</li>
+    <li>The ratio of the two numbers is that object's shielding factor at that dose point. Re-check the box when done.</li>
+</ol>
+</div>
+
+<div class="tip"><b>Same trick for sources:</b> disable one source of several to see each source's individual
+contribution to a dose point.</div>
+
+<!-- ================= CH 8 ================= -->
+<h1 class="chapter" id="ch8"><span class="cnum">8</span>Isodose maps of the radiation field</h1>
+
+<p class="lead">Isodose surfaces draw the boundary of a chosen dose rate — "the 100 mrem/hr line" —
+as a translucent 3D shell around your sources, with distances labeled.</p>
+
+<div class="procedure"><div class="ptitle">Procedure — generate isodose surfaces</div>
+<ol>
+    <li>In the <b>Isodose Surfaces</b> panel, define one or more levels with <span class="ui">+ Add Level</span> —
+        a dose rate in mrem/hr and a display color each (e.g. 100 red, 25 amber, 5 green).</li>
+    <li>Pick a <b>Resolution</b>. More rays per source = smoother shells, longer runtime. Start with Low, rerun
+        at Medium/High when the picture is right.</li>
+    <li>Set <b>Max Range</b> larger than the farthest boundary you expect (rays stop searching there).</li>
+    <li>Press <span class="ui">Generate Isodose Surfaces</span> and watch the progress percentage.
+        Runtime scales with rays × levels × sources.</li>
+    <li>To remove the shells, press <span class="ui">Clear Surfaces</span>.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/05_isodose_tank.png" alt="Isodose surfaces around the tank">
+    <figcaption><b>Figure 8-1.</b> The 100 mrem/hr (red) and 25 mrem/hr (amber) boundaries around the example tank.
+    Each surface carries distance labels at its top, bottom, and four sides.</figcaption>
+</figure>
+
+<h2>8.1&nbsp; Reading and probing the surfaces</h2>
+<ul class="plain">
+    <li>Labels on each shell give the distance from that source at six key points, in feet and inches.</li>
+    <li><b>Double-click anywhere on a shell</b> to probe it: the level, the distance from the nearest source,
+        and the exact X/Y/Z of the point you clicked.</li>
+    <li>Isodose is a <i>visualization</i>. The dose-point calculation (chapter 3) with its finer mesh is the
+        number of record — expect small differences.</li>
+</ul>
+
+<h2>8.2&nbsp; Multiple sources</h2>
+
+<p>Every enabled source grows its <b>own</b> shells (the dose at every point still correctly sums all sources —
+nearby sources' shells merge into a single dumbbell). Two 0.1&nbsp;Ci sources 10&nbsp;m apart produce exactly
+what a survey would find — a hot bubble around each source and background in between:</p>
+
+<figure>
+    <img src="images/14_isodose_two_sources.png" alt="Per-source isodose bubbles for two separated sources">
+    <figcaption><b>Figure 8-2.</b> Two separated 0.1&nbsp;Ci Co-60 sources: individual 100 mrem/hr (red) and
+    25 mrem/hr (amber) bubbles around each. Nothing phantom appears in the empty middle.</figcaption>
+</figure>
+
+<!-- ================= CH 9 ================= -->
+<h1 class="chapter" id="ch9"><span class="cnum">9</span>Survey heat map &amp; parameter sweep</h1>
+
+<h2>9.1&nbsp; Survey heat map</h2>
+
+<p class="lead">The heat map paints the dose rate onto a horizontal plane across the whole scene —
+the same picture as a posted survey map, computed instead of measured.</p>
+
+<div class="procedure"><div class="ptitle">Procedure — generate a survey heat map</div>
+<ol>
+    <li>On the <span class="ui">Analyze</span> tab, open <b>Survey Heat Map</b>.</li>
+    <li>Set the <b>Height</b> of the survey plane (waist/chest height of a worker — 40" is typical).</li>
+    <li>Set the <b>Grid Spacing</b> (12" default; smaller = smoother but slower) and the
+        <b>Half-Extent</b> (how far the map reaches from the scene center).</li>
+    <li>Press <span class="ui">Generate Heat Map</span> and watch the progress percentage.
+        A 20&nbsp;ft map at 6" spacing takes a few seconds.</li>
+    <li><span class="ui">Clear Heat Map</span> removes it.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/17_heatmap.png" alt="Survey heat map painted around the tank">
+    <figcaption><b>Figure 9-1.</b> Survey plane at 40" height around the example tank. Colors follow the
+    survey-map convention, one decade per band: blue &le;&nbsp;1, green 1–10, yellow 10–100, orange 100–1,000,
+    red &ge;&nbsp;1,000&nbsp;mrem/hr (legend in the panel). Note the blue "shadow" ring next to the tank —
+    at lid height the full water column shields the slant paths, while distant floor-level paths exit
+    through the bottom of the wall where there is little water: geometry you can see at a glance.</figcaption>
+</figure>
+
+<h2>9.2&nbsp; Parameter sweep</h2>
+
+<p class="lead">The sweep answers "how thick does it need to be?" in one click: vary one dimension of
+one object across a range and chart the dose at every dose point against it.</p>
+
+<div class="procedure"><div class="ptitle">Procedure — dose vs. shield thickness</div>
+<ol>
+    <li>Select the object to vary (click it in the 3D view) — e.g. the lead wall layer.</li>
+    <li>On the <span class="ui">Analyze</span> tab, open <b>Parameter Sweep</b> and click
+        <span class="ui">Use selected object</span>.</li>
+    <li>Pick the <b>Dimension</b> to vary (radius, height, thickness, outer radius, …) and enter the
+        <b>From</b> / <b>To</b> range in inches and the number of <b>Steps</b>.</li>
+    <li>Press <span class="ui">Run Sweep</span>. The chart plots dose rate vs. the swept value, one line
+        per dose point. The object is restored to its original size afterward.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/18_sweep.png" alt="Parameter sweep chart">
+    <figcaption><b>Figure 9-2.</b> Dose rate at both dose points vs. the lead wall's outer radius
+    (i.e. lead thickness from ¼" to 6"). Read off the thickness that meets your limit directly.</figcaption>
+</figure>
+
+<!-- ================= CH 10 ================= -->
+<h1 class="chapter" id="ch10"><span class="cnum">10</span>Time simulation: transfers, discharges &amp; spills</h1>
+
+<p class="lead">The <span class="ui">Simulate</span> tab animates radiation levels changing over time:
+pumping activity from one vessel to another, receiving a discharge through a hose, or spilling liquid
+onto the floor. For every dose point you get the dose-rate-vs-time curve, the peak, and — the number a
+planner actually needs — the <b>integrated dose</b> for the whole evolution.</p>
+
+<h2>10.1&nbsp; Transfers</h2>
+
+<p>A <b>transfer</b> moves a quantity of activity over the duration of the simulation:</p>
+<ul class="plain">
+    <li><b>From → To:</b> any source object to any other. "(outside scene)" on either end models activity
+        entering from upstream or leaving to somewhere you don't care about. The destination must be a
+        Source object — activity 0 is fine (an empty tank waiting to receive).</li>
+    <li><b>Ci:</b> the total curies moved over the duration.</li>
+    <li><b>Curve:</b> how the flow is shaped in time — linear (constant rate), S-curve (slow-fast-slow),
+        front-loaded, or back-loaded.</li>
+    <li><b>via / Ci transit:</b> an optional carrier — the hose. While the flow is active the carrier holds
+        the stated transit inventory (the activity that is physically inside the hose at any moment), and
+        it flushes to zero when the transfer ends.</li>
+</ul>
+
+<div class="procedure"><div class="ptitle">Procedure — 10 Ci into a tank through a hose over 30 minutes</div>
+<ol>
+    <li>Model the receiving tank with its source volume at <b>0 Ci</b> (or use the tank template and set the
+        sludge activity to 0), and build the hose (chapter 11 — give it radioactive contents with 0 Ci).</li>
+    <li>Place your dose points (chapter 3.2) — e.g. at the tank wall and the operator's position.</li>
+    <li>Switch to the <span class="ui">Simulate</span> tab. Set <b>Duration</b> = 30 min and
+        <b>Time Steps</b> = 30.</li>
+    <li>In <b>Transfers</b>: From <b>(outside scene)</b> to the tank's sludge volume, <b>10 Ci</b>,
+        curve of your choice; via = the hose, with the transit inventory the hose holds while flowing
+        (e.g. 0.5 Ci).</li>
+    <li>Press <span class="ui">Run Simulation</span>. The dose matrix is precomputed once (a few seconds),
+        then the whole timeline is evaluated instantly.</li>
+    <li>Read the chart (one line per dose point) and the summary table: <b>peak</b> dose rate with the time
+        it occurs, and the <b>integrated dose</b> in mrem — what a worker standing there for the whole
+        evolution would accumulate.</li>
+    <li>Press <span class="ui">&#9654;</span> or drag the scrubber to play it back: every marker in the 3D
+        view shows its live dose rate at that moment.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/19_simulation.png" alt="Time simulation of a transfer through a hose">
+    <figcaption><b>Figure 10-1.</b> The hose transfer at t = 20 min: the chart (left) shows the dose rate
+    climbing as the tank fills — and dropping sharply at t = 30 when the hose flushes. Both markers read
+    their live values. The summary table gives peak and integrated dose per point.</figcaption>
+</figure>
+
+<div class="note"><b>Decay.</b> Check <b>Apply radioactive decay</b> to decay every source by its isotope's
+half-life as the clock runs. Irrelevant for a 30-minute Co-60 evolution; very relevant for hours of Na-24
+or a multi-day I-131 timeline.</div>
+
+<h2>10.2&nbsp; Spill scenario</h2>
+
+<p>The spill models a puddle on the floor that grows as liquid escapes: radius =
+&radic;(volume / (&pi; · depth)), fed with activity from the source it drains from.</p>
+
+<div class="procedure"><div class="ptitle">Procedure — simulate a spill</div>
+<ol>
+    <li>On the <span class="ui">Simulate</span> tab, check <b>Spill scenario</b>.</li>
+    <li>Pick the source it drains <b>From</b>, the total <b>activity</b> and <b>liquid volume</b> spilled,
+        the <b>puddle depth</b> (¼" is a reasonable flat-floor guess), and where the puddle is centered.</li>
+    <li>Set the duration and press <span class="ui">Run Simulation</span>. A "Spill Puddle" source object is
+        created automatically and grows through the timeline (its dose is re-computed per step since its
+        geometry changes).</li>
+    <li>Play it back — the puddle spreads across the floor in the 3D view while the dose curves climb.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/20_spill.png" alt="Spill simulation with grown puddle">
+    <figcaption><b>Figure 10-2.</b> End state of a 25-gallon, 2-Ci spill: the puddle has spread ~7 ft
+    across the floor and the operator point has climbed to ~0.8 rem/hr. The chart shows both dose points
+    rising as the puddle grows toward them.</figcaption>
+</figure>
+
+<div class="warn"><b>Model notes.</b> Transferred activity adopts the destination's isotope (keep a single
+transfer chain to one isotope); decay is applied to the post-transfer inventory (slightly conservative for
+activity that arrives late); the growing puddle contributes dose but its negligible self-shielding effect
+on <i>other</i> sources' rays is not re-traced. Scrubbing the timeline moves the puddle's drawn size —
+run the simulation again (or scrub to t = 0) to reset it.</div>
+
+<!-- ================= CH 11 ================= -->
+<h1 class="chapter" id="ch11"><span class="cnum">11</span>The Pipe / Hose Builder</h1>
+
+<p class="lead">For contaminated hose runs and piping, the builder generates the whole run — contents plus
+walls, correctly rotated, with no gaps at the corners — from a simple list of legs.</p>
+
+<div class="procedure"><div class="ptitle">Procedure — build a pipe or hose run</div>
+<ol>
+    <li>Open <b>Insert panel → <span class="ui">Pipe / Hose Builder…</span></b></li>
+    <li>Set the <b>start point</b> (bottom of the first leg). To start from a tank fitting, select the tank
+        first and click <span class="ui">Use top-center of selected object</span>.</li>
+    <li>Define the <b>cross-section</b>: outer radius, wall thickness, wall material, contents material.
+        Wall thickness 0 = an unjacketed stream.</li>
+    <li>If the contents are radioactive, leave <b>Contents are radioactive</b> checked and set the isotope and
+        the <b>total</b> activity in the run — it is split across the legs in proportion to their volume.</li>
+    <li>Build the <b>legs</b> list in order from the start: direction (+Y up, −Y down, ±X, ±Z) and length.
+        <span class="ui">+ Add Leg</span> for each segment of the routing.</li>
+    <li>Press <span class="ui">Build Pipe</span>.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/15_pipe_builder.png" alt="Pipe builder dialog">
+    <figcaption><b>Figure 11-1.</b> The builder configured for a 1" OD hose with 0.125" steel wall carrying
+    2&nbsp;Ci of contaminated water.</figcaption>
+</figure>
+
+<figure>
+    <img src="images/16_pipe_built.png" alt="Built pipe run in the scene">
+    <figcaption><b>Figure 11-2.</b> The generated run — 48" up, then 36" east. Each leg is a contents cylinder
+    plus a wall annulus, back-filled at the bend so there is no void. All parts are ordinary objects afterward:
+    selectable, editable, deletable — and usable as the "via" carrier in a time simulation (chapter 10).</figcaption>
+</figure>
+
+<!-- ================= CH 12 ================= -->
+<h1 class="chapter" id="ch12"><span class="cnum">12</span>Saving, loading &amp; reports</h1>
+
+<h2>12.1&nbsp; Save / Load</h2>
+
+<div class="procedure"><div class="ptitle">Procedure — save and restore your work</div>
+<ol>
+    <li>Press <span class="ui">Save</span> (top right). A <code>radshield-scene.json</code> file downloads.
+        Rename it to whatever you like.</li>
+    <li>The file contains <b>everything</b>: every object (positions, rotations, dimensions, materials,
+        roles, isotopes, activities, calc checkboxes), the tank form settings, all named dose points,
+        calculation settings, and your isodose level list.</li>
+    <li>To restore: press <span class="ui">Load</span> and pick the file. The scene, the tank form, and all
+        settings return exactly as saved.</li>
+</ol>
+</div>
+
+<div class="tip"><b>The files are plain JSON</b> — human-readable text. They diff cleanly, archive well,
+and can be emailed alongside the portable HTML so a colleague can reproduce your exact analysis.</div>
+
+<h2>12.2&nbsp; Printable dose-assessment report</h2>
+
+<div class="procedure"><div class="ptitle">Procedure — generate a report</div>
+<ol>
+    <li>Press <span class="ui">Report</span> (top right). RadShield runs a fresh calculation at every dose
+        point and opens a records-quality report in a new tab.</li>
+    <li>The report contains: a snapshot of the 3D scene, the dose-rate results table for every dose point,
+        a full inventory of sources (isotope, activity, material, dimensions, position, exclusion flags)
+        and shielding, the calculation settings, and a one-paragraph statement of method.</li>
+    <li>Click the report's <span class="ui">Print / Save as PDF</span> button to file it.</li>
+</ol>
+</div>
+
+<figure>
+    <img src="images/21_report.png" alt="Generated dose assessment report">
+    <figcaption><b>Figure 12-1.</b> The generated report — scene picture, per-point results, and full
+    inventory, ready to print or save as PDF.</figcaption>
+</figure>
+
+<!-- ================= CH 13 ================= -->
+<h1 class="chapter" id="ch13"><span class="cnum">13</span>Worked examples</h1>
+
+<h2>13.1&nbsp; Filter-bed tank (activity suspended above the floor)</h2>
+<div class="procedure"><div class="ptitle">Scenario: sludge caught in the top 3" of a filter bed, clean media below, water above</div>
+<ol>
+    <li>Build the tank from the template with the full water level, distribution <b>Uniform</b>, and a
+        placeholder activity of 0 — or simply delete the template's source object after building.</li>
+    <li>Insert a <b>Disk</b>; Smart-Dimension it to the tank's inner radius and 3" thickness.</li>
+    <li>Right-click it → <b>Make Source</b>; set isotope, activity, and Material = Water.</li>
+    <li>Set its <b>Y (bottom)</b> to the top-of-bed height (e.g. 12" if the bed ends 15" up), or use
+        <b>Concentric</b> to the tank then type the Y.</li>
+    <li>Give the disk <b>Priority 30</b> so it wins the overlap against the water column (priority 10).</li>
+    <li>Place the dose point, Calculate.</li>
+</ol>
+</div>
+
+<h2>13.2&nbsp; Shield-wall study (how thick does the lead need to be?)</h2>
+<div class="procedure"><div class="ptitle">Scenario: size a lead wall between a source and an operator</div>
+<ol>
+    <li>Model the source (any shape; set isotope/activity).</li>
+    <li>Insert a <b>Plate</b>; set Material = Lead. Rotate it 90° about X or Z if you need it standing upright.</li>
+    <li>Position it between source and operator; place a dose point at the operator.</li>
+    <li>Select the plate and run a <b>Parameter Sweep</b> (chapter 9.2) on its thickness — the chart hands
+        you dose vs. thickness in one shot; read off the value that meets your limit.</li>
+</ol>
+</div>
+
+<h2>13.3&nbsp; Two containers in one room</h2>
+<div class="procedure"><div class="ptitle">Scenario: a shielded tank plus a vent-path collection bottle</div>
+<ol>
+    <li>Build the tank from the template.</li>
+    <li>Insert a <b>Cylinder</b> for the bottle; size it (e.g. 6" radius × 18"); make it a Source with its own
+        isotope and activity — different isotopes are handled correctly.</li>
+    <li>Move the bottle to its real location (Move mode, or type coordinates).</li>
+    <li>Place the dose point where the worker stands; Calculate — both sources contribute through their own shielding.</li>
+    <li>Generate isodose surfaces to see both hot zones and any overlap region.</li>
+</ol>
+</div>
+
+<h2>13.4&nbsp; Planning a transfer evolution (dose budget for the job)</h2>
+<div class="procedure"><div class="ptitle">Scenario: pump 10 Ci of contaminated water into a receiving tank; how much dose does the operator take?</div>
+<ol>
+    <li>Build the receiving tank (template) with its source volume at 0 Ci.</li>
+    <li>Build the transfer hose with the Pipe Builder (radioactive contents, 0 Ci initial).</li>
+    <li>Add dose points at every place a person will be: valve station, tank side, walkway.</li>
+    <li>Simulate tab: transfer From (outside scene) To the tank sludge, 10 Ci over 30 min, via the hose
+        with its transit inventory; pick the curve that matches the pump behavior.</li>
+    <li>Run. The summary table's <b>integrated dose</b> column is the per-location dose budget for the
+        evolution; the peak column tells you the worst moment. Move the dose points or add shielding and
+        re-run until the budget fits.</li>
+</ol>
+</div>
+
+<!-- ================= CH 14 ================= -->
+<h1 class="chapter" id="ch14"><span class="cnum">14</span>Reference: shortcuts &amp; troubleshooting</h1>
+
+<h2>14.1&nbsp; Keyboard shortcuts</h2>
+<table>
+<tr><th style="width:130px">Key</th><th>Action</th><th style="width:130px">Key</th><th>Action</th></tr>
+<tr><td><span class="key">V</span></td><td>Select mode</td><td><span class="key">S</span></td><td>Smart Dimension</td></tr>
+<tr><td><span class="key">G</span></td><td>Move mode</td><td><span class="key">M</span></td><td>Measure</td></tr>
+<tr><td><span class="key">R</span></td><td>Rotate mode</td><td><span class="key">D</span></td><td>Dose-point pick</td></tr>
+<tr><td><span class="key">Del</span></td><td>Delete selected</td><td><span class="key">Esc</span></td><td>Cancel tool / relationship, close popups</td></tr>
+<tr><td><span class="key">Ctrl+D</span></td><td>Duplicate selected</td><td><span class="key">Ctrl+Z</span> / <span class="key">Ctrl+Y</span></td><td>Undo / Redo</td></tr>
+</table>
+
+<h2>14.2&nbsp; Troubleshooting</h2>
+<table>
+<tr><th style="width:290px">Symptom</th><th>Likely cause and fix</th></tr>
+<tr><td>Dose rate is zero</td>
+    <td>No enabled source with activity &gt; 0. Check for the orange SRC badge and the green checkbox on your
+    source; check Activity isn't 0.</td></tr>
+<tr><td>Dose rate absurdly high / "Infinity"</td>
+    <td>The dose point is inside a source. Move it outside; use Measure to verify the distance.</td></tr>
+<tr><td>A shield seems to do nothing</td>
+    <td>Its green calc checkbox is off (row struck through), or the ray from source to dose point doesn't
+    actually pass through it — orbit the camera and sight down the line, or Measure to check the geometry.</td></tr>
+<tr><td>Overlapping shapes give the wrong material</td>
+    <td>Priority. Select each object and check the Priority field — the higher number wins the overlap (§4.5).</td></tr>
+<tr><td>Isodose shows nothing for a level</td>
+    <td>That dose rate doesn't exist ≥1 cm outside the source (level too high), or Max Range is too small for a
+    low level. Adjust the level or the range.</td></tr>
+<tr><td>Everything disappeared</td>
+    <td>Probably <span class="ui">New</span>. Press <span class="key">Ctrl+Z</span>.</td></tr>
+<tr><td>Loaded a scene but the tank form looks wrong</td>
+    <td>The file was saved by v0.4 or older (form state wasn't saved then). Set the form once, rebuild, re-save.</td></tr>
+<tr><td>Simulation says "Nothing to simulate"</td>
+    <td>Add at least one transfer with Ci &gt; 0, enable the spill, or check decay. A transfer also needs a
+    From or To that isn't "(outside scene)" on both ends.</td></tr>
+<tr><td>Transfer destination missing from the dropdown</td>
+    <td>Destinations must be <b>Source</b> objects. Select the receiving object and set Role = Source
+    (activity 0 is fine), then reopen the Simulate tab.</td></tr>
+<tr><td>Puddle stayed big after playing a spill</td>
+    <td>Scrubbing draws the puddle at the scrubbed time. Drag the scrubber back to 0, or re-run the simulation.</td></tr>
+<tr><td>Heat map is one flat color</td>
+    <td>The whole plane is within one decade. That's real — the color scale is fixed (0.1 to 10k mrem/hr)
+    so maps compare across scenes.</td></tr>
+</table>
+
+<p style="margin-top:48px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:14px;">
+RadShield User Guide — v0.5, July 2026. Physics &amp; methodology: <code>docs/DESIGN.md</code>.
+This document is self-contained (images embedded) and prints cleanly — use your browser's Print → Save as PDF.</p>
+
+</div>
+</body>
+</html>

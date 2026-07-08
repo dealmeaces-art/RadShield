@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const outName = process.argv[2] || 'RadShield_Portable_v4.html';
+const outName = process.argv[2] || 'RadShield_Portable_v5.html';
 
 let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 

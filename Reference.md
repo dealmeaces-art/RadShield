@@ -3,6 +3,31 @@
 ## What It Is
 A browser-based radiation dose rate calculator replacing MicroShield. Uses point-kernel integration with buildup factors, ray-tracing through 3D geometry, and Three.js visualization. Runs as a single portable HTML file — no installation needed.
 
+## What's New (v0.6 - July 2026) — analysis & simulation workflows
+Same portable file (`RadShield_Portable_v5.html`). Sidebar reorganized into **Model | Analyze | Simulate** tabs.
+
+- **Named dose points** (Analyze): any number of named locations, all calculated at once (results table for >1 point), per-point 3D marker labels, pick-in-3D per row, saved with the scene (old single-point files still load). Editor hands picked locations to the app via the `onDosePick` hook.
+- **Time simulation** (Simulate, `src/sim.js`): transfers of activity between sources (or in/out of the scene) over a duration with selectable curves, optional carrier ("via" hose holding a transit inventory while flowing), optional per-isotope decay, and spill scenarios (auto-created "spill-puddle" disk grows as √(V/πd), per-step dose since geometry changes). Engine precomputes a dose-per-curie matrix (dose is linear in activity) so timelines/playback are instant. Outputs per dose point: dose-vs-time chart (canvas renderer `drawChart`), peak, **integrated dose** (trapezoid, mrem); playback scrubber animates markers + puddle in 3D. Note: transferred activity adopts destination's isotope; decay applied to post-transfer inventory.
+- **Survey heat map** (Analyze): dose rate on a horizontal plane grid painted into the 3D view, fixed log color scale one decade per band (0.1 → 10k mrem/hr), chunked with progress. `Scene.showHeatmap(canvas, area)`.
+- **Parameter sweep** (Analyze): vary one dimension of the selected object, chart dose vs value at every dose point; object restored after.
+- **Report** (topbar): printable dose-assessment report in a new tab — `Scene.snapshot()` 3D image, fresh per-point results, source/shield inventory tables, method footer, Print/Save-as-PDF. Falls back to download if popup blocked. ⚠ The report template contains a literal `</body>` inside the inline script — any tooling that injects into the page must use `lastIndexOf('</body>')`.
+- Tests: `tests/sim_check.js` (18 checks); browser smoke now 28 checks. User Guide expanded to 14 chapters / 21 screenshots.
+
+## What's New (v0.5 - July 2026) — editor/UX overhaul (Phase 2)
+Portable build: `RadShield_Portable_v5.html` (now the build script's default output).
+
+- **New primitives**: `BoxVolume` (width/depth/height — covers cubes, rectangles, plates, walls; a "plane" is just a thin box) and `SphereVolume` (position = bottom point, center at +radius, consistent with the bottom-center convention). Full physics support: slab/quadratic ray intersection, rotated source meshing with activity conserved, serialization, rendering, properties. Insert via ribbon, sidebar Insert panel, or right-click menu ("+ Plate / wall" preset is 24×24×0.5").
+- **Per-object calculation toggle**: `Volume.enabled` flag. Unchecked objects are excluded from ray-tracing, source meshing, material lookup, and activity totals, and draw as faint ghosts labeled "(excluded)". Toggle via the outliner checkbox, properties panel, or context menu — independent of the visibility eye (which stays display-only).
+- **Save/Load tank bug FIXED**: the saved JSON now also carries `tankTemplate` (all tank form fields + wall/floor layer arrays), `calcSettings`, and `isodoseLevels`, and Load restores them. Previously the tank form stayed at defaults after Load, so the next "Build/Rebuild Tank" silently replaced the loaded tank with the default one (and a save made before ever clicking Build captured the default tank).
+- **Ribbon toolbar** (SolidEdge-style command groups across the viewport top): Mode (Select/Move/Rotate), Inspect (Smart Dim/Measure/Dose Pt), Relationships (Concentric, On Top, Beneath, Flush, Center In, Parallel), Insert (Box/Plate/Cylinder/Sphere).
+- **Relationships workflow**: click a relationship button → click the object to MOVE → click the TARGET (a pre-selected object is used as the mover automatically). Esc cancels. Same `alignVolumes` math as the right-click align menu, which still works.
+- **Measure tool** (M): click two points (object surfaces or the floor); draws endpoint markers + a line + a label with total distance in inches/feet and ΔX/ΔY/ΔZ. The status bar repeats the numbers with both endpoint coordinates. Cleared on leaving the mode.
+- **Smart Dimension** (S): click an object; a floating editor appears at the cursor with its dimension fields; edits apply live (undoable).
+- **Text sprites rewritten**: auto-sized canvas, multiline support, aspect-correct sprite scale — fixes the clipped/stretched labels (the old isodose click label cut off the Y/Z values).
+- **Contextual "How to" bar** across the bottom of the viewport: always explains the active tool (what it does, how to use it, its shortcut); during a relationship it shows Step 1/Step 2 instructions with a description of what the mate will do. Driven by `Editor.updateHelp()` (MODE_HELP/MATE_DESC maps in editor.js). Tooltips added across the UI: topbar New/Save/Load, all Insert buttons (with default sizes), tank form fields, dose point, calc settings, isodose controls, properties Role/Priority. Inserting a shape now hints where to edit its size in the status bar.
+- **Multi-source isodose FIXED**: surfaces are now generated per source — each enabled source volume gets its own ray-fan vantage at its own centroid, while the dose at every sample still sums ALL sources (so overlap merges naturally into dumbbells). Previously a single combined-centroid vantage meant any level above the midpoint dose rendered NOTHING for separated sources (e.g. two 0.1 Ci sources 10 m apart showed no 25 mrem/hr bubbles at all — dangerous under-reporting). The distance search also now takes the FIRST crossing (outward march ×1.5 then bisect) so a vantage's rays can't tunnel through a low-dose corridor and land on another source's far lobe. Isodose click-inspect reports distance "from nearest source" when there are multiple. Generation time scales with source count (dropdown labels are per-source).
+- Tests: `tests/geometry_check.js` extended to 46 checks (box/sphere containment+intersection+meshing+round-trip, enabled-flag exclusion); new `tests/isodose_check.js` (12 checks: reproduces the two-source bug, verifies per-source lobes at the correct radii, surface points within 10% of the requested dose level, dumbbell merge for low levels). 14-check headless-Edge UI smoke test (puppeteer-core) passed, including real two-source isodose generation through the UI path.
+
 ## Current State (v0.3 - March 2026)
 
 ### Architecture
@@ -27,6 +52,10 @@ A browser-based radiation dose rate calculator replacing MicroShield. Uses point
   - Auto-distance labels at key points (top, bottom, 4 cardinal directions) in feet/inches
   - Double-click to inspect any surface point — shows distance and X/Y/Z coordinates
   - Configurable resolution (162 / 642 / 2562 rays) and max search range
+
+## Documentation
+- **`RadShield_User_Guide.html`** (repo root) — THE user guide: polished self-contained manual (3.7 MB, 16 screenshots embedded as data URIs, print-to-PDF stylesheet). 12 chapters: UI tour, tank quick-start, custom geometry, relationships, measuring, calc-exclude, isodose, pipe builder, save/load, worked examples, troubleshooting. Source: `docs/guide_src.html` (edit this) + `docs/images/`; rebuild with `node tools/build_guide.js`. Screenshots captured from the real app via headless Edge (puppeteer-core, shots_a.js/shots_b.js pattern in session scratchpad) — recapture if the UI changes. `docs/HOW_TO.md` is just a pointer.
+- **`docs/DESIGN.md`** — physics: point-kernel equations step by step, GP buildup formula + ANS-6.4.3 provenance, outermost-material multi-layer rule, NIST XCOM data, meshing math per shape, isodose algorithm, full approximations/limitations list, verification summary.
 
 ## Real-World Use Case
 The user works with **reactor plant waste processing**:
@@ -81,33 +110,47 @@ RadShield/
 ├── RadShield_Portable.html     # v1 - needs internet for Three.js CDN
 ├── RadShield_Portable_v2.html  # v2 - fully offline (outdated)
 ├── RadShield_Portable_v3.html  # v3 - outdated (pre ANS-6.4.3 data)
-├── RadShield_Portable_v4.html  # v4 - CURRENT portable version (built, do not edit)
+├── RadShield_Portable_v4.html  # v4 - outdated (pre box/sphere, has Save/Load tank bug)
+├── RadShield_Portable_v5.html  # v5 - CURRENT portable version (built, do not edit)
+├── RadShield_User_Guide.html   # Polished self-contained user manual (built, do not edit)
+├── docs/
+│   ├── guide_src.html          # User guide SOURCE (edit this, then node tools/build_guide.js)
+│   ├── HOW_TO.md               # Pointer to the user guide
+│   ├── DESIGN.md               # Physics design doc: equations, data provenance, approximations
+│   └── images/                 # 16 tutorial screenshots captured headlessly from the app
 ├── src/
 │   ├── materials.js            # NIST XCOM attenuation data + ANS-6.4.3 GP buildup factors
 │   ├── isotopes.js             # Isotope gamma lines (Co-60, Cs-137, etc.)
 │   ├── physics.js              # Point-kernel dose calc + isodose surface generation
 │   ├── geometry.js             # Volume classes (position+rotation), SceneModel, JSON, tank preset
+│   ├── sim.js                  # Time simulation engine (dose-per-curie matrix, transfers, spills)
 │   ├── scene.js                # Three.js rendering + picking/highlight/gizmo/interaction modes
 │   └── editor.js               # Document+undo, outliner, properties, context menu, keyboard
 ├── TransformControls.js        # three.js r128 gizmo (cached for offline build)
 ├── tools/
-│   └── build_portable.js       # node tools/build_portable.js -> rebuilds portable HTML
+│   ├── build_portable.js       # node tools/build_portable.js -> rebuilds portable HTML
+│   └── build_guide.js          # node tools/build_guide.js -> rebuilds the user guide
 ├── tests/
 │   ├── buildup_check.js        # GP buildup regression test vs ANS-6.4.3 Table 3 (node)
-│   └── geometry_check.js       # Transform/ray-trace/serialization regression test (node)
+│   ├── geometry_check.js       # Transform/ray-trace/serialization regression test (node)
+│   ├── isodose_check.js        # Per-source isodose + mixed-isotope regression test (node)
+│   └── sim_check.js            # Time simulation engine regression test (node)
 ├── three.min.js                # Three.js r128 (cached for offline build)
 ├── OrbitControls.js            # Orbit controls (cached for offline build)
-├── ANS 6.4.3 specification.pdf # ANSI/ANS-6.4.3-1991 (LOCAL ONLY - licensed standard, not in repo)
+├── ANS 6.4.3 specification.pdf # ANSI/ANS-6.4.3-1991 (source of buildup data)
 └── Reference.md                # This file
 ```
 
 ## How to Run
 - **At home (development):** `python -m http.server 8080` in the RadShield directory, then open `http://localhost:8080`
-- **At work:** Email `RadShield_Portable_v4.html` to yourself, save to desktop, double-click to open in browser
+- **At work:** Email `RadShield_Portable_v5.html` to yourself, save to desktop, double-click to open in browser
 - **Rebuild portable after changing src/:** `node tools/build_portable.js`
-- **Tests:** `node tests/buildup_check.js` and `node tests/geometry_check.js`
+- **Tests:** `node tests/buildup_check.js`, `node tests/geometry_check.js`, `node tests/isodose_check.js`, `node tests/sim_check.js`
 
 ## Session History
+- **Session 4 (July 2026), mixed-isotope fix:** Source mesh elements now carry their source volume's isotopeKey; volumetricSourceDose and isodose generation transport each element with its own gamma lines (previously the first source's isotope was forced onto every source). Unshielded Reference card now sums per source with its own gamma constant and distance. Regression: isodose_check.js section 4 (mixed scene = sum of per-isotope runs; old behavior shown to differ >20%).
+- **Session 4 (July 2026), multi-source isodose fix:** User caught that isodose surfaces were generated from a single combined source centroid — for separated sources, levels above the midpoint dose silently drew nothing (missing hot-zone bubbles around each source). Rewrote generation: per-source vantage centers (dose still sums all sources), first-crossing distance search (outward ×1.5 march + bisect, prevents rays tunneling to another source's far lobe), nearest-source click-inspect label, per-source status/resolution labels. New tests/isodose_check.js locks the two-sources-10-m-apart scenario incl. dose accuracy of drawn points.
+- **Session 4 (July 2026), Phase 2 — box/sphere primitives + UX overhaul:** BoxVolume + SphereVolume with full physics; per-object calculation enable/disable (ghosted rendering); Save/Load fixed to round-trip the tank template form (+ calc settings + isodose levels); SolidEdge-style ribbon (Mode/Inspect/Relationships/Insert); guided two-click relationship workflow on top of alignVolumes; two-point Measure tool with in-viewport dimension label; Smart Dimension floating editor; text sprites rewritten (multiline, auto-sized, aspect-correct). geometry_check.js → 46 checks; 12-check headless-Edge UI smoke test. Built RadShield_Portable_v5.html.
 - **Session 1:** Initial build — tank geometry, physics engine, 3D visualization, UI, portable HTML
 - **Session 2:** Added settled source distribution, fixed R/hr→rem/hr label, added air attenuation toggle. Major refactor to volume-based architecture (CylinderVolume, AnnulusVolume, DiskVolume, SceneModel). Added "Additional Volumes" for extra shields/sources on top of tank. Fixed buildup factor method (dominant→outermost material). Corrected NIST XCOM data for all materials. Added isodose surface visualization with icosphere ray-marching, distance labels, and click-to-inspect. User will bring ANS-6.4.3 GP buildup data from work for final accuracy calibration.
 - **Session 3 (July 2026), Phase 1.5 — align mates + pipe builder:** One-shot align operations ("mates"): select mover, right-click target → Align submenu (concentric / place on top / underneath / coplanar bottoms / center inside / match rotation) — implemented in the target's local frame so they work on rotated targets; right-clicking a different volume no longer steals the selection. Pipe/Hose Builder modal (Insert panel): start point (or "top-center of selected object"), outer radius + wall thickness/material, contents material, optional radioactive contents (total activity split across legs by volume), ordered legs (±X/±Y/±Z + length); generates rotated content cylinders + wall annuli per leg with corner back-extension (no voids at bends). Editor.buildPipe(cfg) and Editor.alignVolumes(moverId, targetId, mode) are scriptable. Smoke test now 29 checks incl. ray-trace through a built hose. NOT yet done: persistent/parametric constraints (aligns are one-shot snaps).
