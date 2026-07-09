@@ -7399,8 +7399,11 @@ const Scene = (() => {
                 downX = e.clientX; downY = e.clientY;
                 downOnGizmo = !!(transformControls &&
                     (transformControls.dragging || transformControls.axis));
+                // A left-drag orbits — pivot about the centre of the current view
+                if (!downOnGizmo) recenterPivot();
             } else if (e.button === 2) {
                 rightX = e.clientX; rightY = e.clientY;
+                recenterPivot();   // right-drag pans; keep the pivot sensible
             }
         });
 
@@ -7887,10 +7890,11 @@ const Scene = (() => {
             ? { x: target.x, y: target.y, z: target.z } : null;
     }
 
-    // Wheel zoom that homes on the cursor. The focus point is whatever the
-    // cursor ray hits (a volume, an isodose surface, or the ground); the whole
-    // camera+target rig is scaled about that point, so the pivot slides toward
-    // where you zoom and rotation follows.
+    // Wheel zoom that homes on the cursor: the camera moves toward the point
+    // under the cursor so that point stays put on screen. It does NOT decide the
+    // rotation pivot — that is chosen fresh when you start to rotate (see
+    // recenterPivot), matching CAD navigation where zoom-to-cursor and the
+    // orbit centre are independent.
     function onWheelZoom(e) {
         e.preventDefault();
         if (!controls || !camera) return;
@@ -7908,16 +7912,42 @@ const Scene = (() => {
         }
 
         const oldDist = camera.position.distanceTo(controls.target);
-        let scale = e.deltaY < 0 ? 0.82 : (1 / 0.82);   // <1 zoom in, >1 zoom out
+        let scale = e.deltaY < 0 ? 0.85 : (1 / 0.85);   // <1 zoom in, >1 zoom out
         const nd = oldDist * scale;
         if (nd < controls.minDistance) scale = controls.minDistance / oldDist;
         else if (nd > controls.maxDistance) scale = controls.maxDistance / oldDist;
 
-        // newP = focus + scale*(P - focus), applied to both camera and target
+        // Uniform scale of the camera+target rig about the cursor focus keeps
+        // that focus point fixed on screen (true zoom-to-cursor).
         const camVec = camera.position.clone().sub(focus).multiplyScalar(scale);
         const tgtVec = controls.target.clone().sub(focus).multiplyScalar(scale);
         camera.position.copy(focus).add(camVec);
         controls.target.copy(focus).add(tgtVec);
+        controls.update();
+    }
+
+    // Set the orbit pivot to whatever sits at the CENTER of the current view,
+    // called when a rotate/pan drag begins. Because the view centre lies on the
+    // camera's forward axis, moving the target along that axis changes only the
+    // pivot depth — the on-screen image does not jump. This makes rotation spin
+    // about the model you are looking at (Solid Edge rotates about the centre of
+    // the model range), never about wherever you last zoomed.
+    function recenterPivot() {
+        if (!controls || !camera) return;
+        const rc = new THREE.Raycaster();
+        rc.setFromCamera(new THREE.Vector2(0, 0), camera);   // NDC (0,0) = screen centre
+        let dist = null;
+        const targets = pickMeshes.slice();
+        if (isodoseMeshes && isodoseMeshes.length) targets.push(...isodoseMeshes);
+        const hits = targets.length ? rc.intersectObjects(targets, false) : [];
+        if (hits.length) dist = hits[0].distance;
+        if (dist == null) {
+            const g = pickGroundPoint(rc);
+            if (g) dist = camera.position.distanceTo(new THREE.Vector3(g.x, g.y, g.z));
+        }
+        if (dist == null) return;   // nothing in the centre of view — keep the pivot
+        dist = Math.max(controls.minDistance, Math.min(controls.maxDistance, dist));
+        controls.target.copy(rc.ray.at(dist, new THREE.Vector3()));
         controls.update();
     }
 
@@ -8120,6 +8150,11 @@ const Scene = (() => {
         cancelMeasure,
         deleteLastMeasure,
         getSnap: () => currentSnap,
+        getCameraState: () => ({
+            pos: camera ? camera.position.toArray() : null,
+            target: controls ? controls.target.toArray() : null,
+            quat: camera ? camera.quaternion.toArray() : null
+        }),
         COLORS
     };
 
