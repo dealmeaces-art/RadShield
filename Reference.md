@@ -3,6 +3,18 @@
 ## What It Is
 A browser-based radiation dose rate calculator replacing MicroShield. Uses point-kernel integration with buildup factors, ray-tracing through 3D geometry, and Three.js visualization. Runs as a single portable HTML file — no installation needed.
 
+## What's New (v0.8 - July 2026) — navigation, mates, air gaps, heatmap rings, measure editing
+Portable file: `RadShield_Portable_v8.html`. A batch of workflow upgrades from field use on large scenes.
+
+- **Zoom-to-cursor camera** (`src/scene.js`): the built-in OrbitControls dolly is replaced by `onWheelZoom`, which scales the whole camera+target rig about the point under the cursor (raycast against volumes, isodose meshes, then the ground). The orbit pivot follows the zoom, so you can dive into one corner of a 100-ft scene and rotate about *that* spot. `controls.enableZoom=false`, `screenSpacePanning=true`, min/max distance clamps.
+- **Persistent relationships (mates)** (`src/editor.js`, `src/geometry.js`): relationships are no longer one-shot. `alignVolumes` now stores `mover.constraint={targetId,mode}`; `resolveConstraints()` re-solves all constrained volumes inside `refreshAll()` (runs before every redraw), so a cover mated **On Top** of a tank follows when the tank is made taller with Smart Dimension. `solveAlign()` is the pure solver (reused by the resolver, no side effects). Constraint is serialized in `Volume.toJSON`/`volumeFromJSON`. Right-click → **Remove relationship (unlink)** clears it. Dangling constraints (deleted target) auto-drop.
+- **Air-gap wall/floor layers**: tank layer material dropdown gains **Air (gap)** for lined tanks with a void between liner and shell; renders as a faint pale-blue shell (`isAir` branch in `renderVolume`).
+- **Plug outer-Ø override**: `createTankPreset` plug uses `config.plug.outerRadius` when larger than the opening → a cover plate that overlaps the lid. UI field `#plugOuterDia` (diameter; 0 = flush).
+- **Isodose rings on the Survey Heat Map**: `#heatRingsOn` + `#heatRings` (comma-separated mrem/hr). `drawHeatRings()` does marching-squares contours on an upscaled display canvas; a ring table lists each level's average + min–max distance from the source. Fill alpha lowered (was muddy) so rings read clearly.
+- **Measure tool: multiple + delete + isodose snap**: measurements now stack (array of groups) and persist across tool switches; click a measurement's midpoint dot (or Del / Esc) to remove it (`cancelMeasure`/`deleteLastMeasure` exposed, wired in editor keydown). Measure also snaps to isodose surface grid points (vertices of the ray-fan mesh) via a raycast in `updateHover`.
+- Docs: guide updated (persistent relationships note, zoom-to-cursor tip, air-gap/plug-OD tank steps, heat-map ring steps, measure stacking/isodose note); all "SolidEdge" comparisons removed from the User Guide.
+- Verified end-to-end headlessly (scratchpad snaptest/verify_v8.js) on index.html and the inlined portable: air layer present, plug 20"Ø→10"r, mate follows target grown to y=90, constraint survives save/load, heatmap ring table populated, camera wheel + measure APIs no-error.
+
 ## What's New (v0.7 - July 2026) — animated radiation field + in-app GIF export
 Portable file: `RadShield_Portable_v7.html`. The **Simulate** tab can now animate the isodose radiation field across the timeline and export it as an animated GIF — entirely in-browser, no external tools.
 

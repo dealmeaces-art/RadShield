@@ -60,6 +60,11 @@ const Geometry = (() => {
                 : { x: 0, y: 0, z: 0 };
             this._updateRotationMatrix();
 
+            // Persistent relationship (mate): { targetId, mode }. When set, the
+            // editor re-solves this volume's pose whenever geometry changes so
+            // it follows its target. null = free-floating.
+            this.constraint = config.constraint || null;
+
             // Source properties
             if (this.role === 'source') {
                 this.isotopeKey = config.isotopeKey || 'Co-60';
@@ -173,6 +178,7 @@ const Geometry = (() => {
                 j.isotopeKey = this.isotopeKey;
                 j.activity_Ci = this.activity_Ci;
             }
+            if (this.constraint) j.constraint = { ...this.constraint };
             j.dimensions = this._dims();
             return j;
         }
@@ -787,6 +793,7 @@ const Geometry = (() => {
             enabled: j.enabled,
             isotopeKey: j.isotopeKey,
             activity_Ci: j.activity_Ci,
+            constraint: j.constraint,
             dimensions: j.dimensions
         };
         switch (j.type) {
@@ -948,12 +955,18 @@ const Geometry = (() => {
 
             // --- Plug ---
             if (config.plug && lidOpeningR > 0) {
+                // A plug can be wider than the opening (a cover that overlaps the
+                // lid). An outerRadius override larger than the opening makes the
+                // plug a cover resting on the lid's top face; otherwise it fills
+                // the opening flush.
+                const plugR = (config.plug.outerRadius && config.plug.outerRadius > lidOpeningR)
+                    ? config.plug.outerRadius : lidOpeningR;
                 model.addVolume(new CylinderVolume({
                     id: 'plug',
                     role: 'container',
                     materialKey: config.plug.materialKey,
                     position: { x: cx, y: cy + config.innerHeight + config.lid.thickness, z: cz },
-                    dimensions: { radius: lidOpeningR, height: config.plug.thickness },
+                    dimensions: { radius: plugR, height: config.plug.thickness },
                     priority: 55,
                     label: `Plug: ${Materials.getMaterial(config.plug.materialKey).name}`
                 }));

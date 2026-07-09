@@ -745,6 +745,7 @@
                             <div id="plugInputs">
                                 <div class="form-row"><label>Plug Material</label><select id="plugMaterial"><option value="steel" selected>Steel</option><option value="lead">Lead</option></select></div>
                                 <div class="form-row"><label>Plug Thickness</label><input type="number" id="plugThickness" value="5" step="0.25" min="0"><span class="unit">in</span></div>
+                                <div class="form-row" title="Set larger than the opening for a cover plate that overlaps the lid (0 = flush plug that just fills the opening)"><label>Plug Outer Ø</label><input type="number" id="plugOuterDia" value="0" step="0.5" min="0"><span class="unit">in</span></div>
                             </div>
                         </div>
                     </div>
@@ -846,8 +847,11 @@
                     <div class="form-row" title="Height of the survey plane above the floor (waist/chest height of a worker)"><label>Height</label><input type="number" id="heatHeight" value="40" step="6"><span class="unit">in</span></div>
                     <div class="form-row" title="Distance between survey grid points — smaller is smoother but slower"><label>Grid Spacing</label><input type="number" id="heatSpacing" value="12" step="3" min="2"><span class="unit">in</span></div>
                     <div class="form-row" title="The map covers this distance from the scene center in every direction"><label>Half-Extent</label><input type="number" id="heatHalf" value="120" step="12" min="12"><span class="unit">in</span></div>
+                    <div class="checkbox-row"><input type="checkbox" id="heatRingsOn" checked><label for="heatRingsOn">Draw isodose rings + distances</label></div>
+                    <div class="form-row" title="Dose-rate contours to trace on the map, in mrem/hr. Comma-separated; each becomes a labelled ring with its distance from the source."><label>Ring Levels</label><input type="text" id="heatRings" value="1000, 100, 10, 1" style="flex:1"><span class="unit">mrem/hr</span></div>
                     <button class="btn-calculate" id="heatBtn" style="background:#0e7490; border-color:#22d3ee;" title="Compute the dose rate at every grid point and paint the plane" onclick="generateHeatmap()">Generate Heat Map</button>
-                    <button class="add-layer-btn" style="margin-top:4px;" onclick="Scene.clearHeatmap(); document.getElementById('heatLegend').style.display='none'; setStatus('Heat map cleared');">Clear Heat Map</button>
+                    <button class="add-layer-btn" style="margin-top:4px;" onclick="Scene.clearHeatmap(); document.getElementById('heatLegend').style.display='none'; document.getElementById('heatRingTable').innerHTML=''; setStatus('Heat map cleared');">Clear Heat Map</button>
+                    <table class="sim-table" id="heatRingTable" style="margin-top:8px;"></table>
                     <div id="heatLegend" style="display:none; margin-top:8px;">
                         <div style="height:12px; border-radius:4px; background:linear-gradient(90deg,#1e40af,#2563eb,#22c55e,#eab308,#f97316,#ef4444,#d946ef);"></div>
                         <div style="display:flex; justify-content:space-between; font-size:10px; color:#8b949e; margin-top:2px;">
@@ -5454,6 +5458,11 @@ const Geometry = (() => {
                 : { x: 0, y: 0, z: 0 };
             this._updateRotationMatrix();
 
+            // Persistent relationship (mate): { targetId, mode }. When set, the
+            // editor re-solves this volume's pose whenever geometry changes so
+            // it follows its target. null = free-floating.
+            this.constraint = config.constraint || null;
+
             // Source properties
             if (this.role === 'source') {
                 this.isotopeKey = config.isotopeKey || 'Co-60';
@@ -5567,6 +5576,7 @@ const Geometry = (() => {
                 j.isotopeKey = this.isotopeKey;
                 j.activity_Ci = this.activity_Ci;
             }
+            if (this.constraint) j.constraint = { ...this.constraint };
             j.dimensions = this._dims();
             return j;
         }
@@ -6181,6 +6191,7 @@ const Geometry = (() => {
             enabled: j.enabled,
             isotopeKey: j.isotopeKey,
             activity_Ci: j.activity_Ci,
+            constraint: j.constraint,
             dimensions: j.dimensions
         };
         switch (j.type) {
@@ -6342,12 +6353,18 @@ const Geometry = (() => {
 
             // --- Plug ---
             if (config.plug && lidOpeningR > 0) {
+                // A plug can be wider than the opening (a cover that overlaps the
+                // lid). An outerRadius override larger than the opening makes the
+                // plug a cover resting on the lid's top face; otherwise it fills
+                // the opening flush.
+                const plugR = (config.plug.outerRadius && config.plug.outerRadius > lidOpeningR)
+                    ? config.plug.outerRadius : lidOpeningR;
                 model.addVolume(new CylinderVolume({
                     id: 'plug',
                     role: 'container',
                     materialKey: config.plug.materialKey,
                     position: { x: cx, y: cy + config.innerHeight + config.lid.thickness, z: cz },
-                    dimensions: { radius: lidOpeningR, height: config.plug.thickness },
+                    dimensions: { radius: plugR, height: config.plug.thickness },
                     priority: 55,
                     label: `Plug: ${Materials.getMaterial(config.plug.materialKey).name}`
                 }));
@@ -6660,7 +6677,16 @@ const Scene = (() => {
         controls.target.set(0, 40, 0);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = true;   // pan in the view plane, not world XZ
+        controls.minDistance = 2;
+        controls.maxDistance = 8000;
+        controls.enableZoom = false;          // replaced by zoom-to-cursor below
         controls.update();
+
+        // Zoom toward whatever is under the cursor and drag the orbit pivot with
+        // it, so after zooming into a corner of a large scene the view rotates
+        // about that corner instead of a fixed centre point.
+        renderer.domElement.addEventListener('wheel', onWheelZoom, { passive: false });
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.4));
         const dl = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -6753,11 +6779,15 @@ const Scene = (() => {
     // -----------------------------------------------------------------------
     function renderVolume(group, vol) {
         const isSource = vol.isSource;
-        const baseColor = isSource ? COLORS.source : (COLORS[vol.materialKey] || 0x888888);
+        // Air gaps (e.g. between a tank and its liner) render as a barely-there
+        // pale-blue shell so the gap reads as empty space, not a solid layer.
+        const isAir = vol.materialKey === 'air';
+        const baseColor = isSource ? COLORS.source
+            : (isAir ? 0x8fd3ff : (COLORS[vol.materialKey] || 0x888888));
         // Volumes excluded from the calculation draw as faint ghosts
         const ghost = vol.enabled === false;
         const opacity = ghost ? 0.06
-            : (isSource ? 0.5 : (vol.role === 'container' ? 0.35 : 0.3));
+            : (isAir ? 0.07 : (isSource ? 0.5 : (vol.role === 'container' ? 0.35 : 0.3)));
         const wireOpacity = ghost ? 0.15 : 0.5;
         const metalness = (vol.materialKey === 'steel' || vol.materialKey === 'lead') ? 0.7 : 0.1;
 
@@ -7461,22 +7491,45 @@ const Scene = (() => {
     // Measure tool: click two points (on volume surfaces or the ground);
     // draws markers, a line, and a distance label with X/Y/Z deltas.
     // =======================================================================
-    let measureGroup = null;
-    let measurePtA = null;
+    let measurements = [];    // completed: [{ group, a, b, mid }]
+    let measurePtA = null;    // first point of an in-progress measurement
+    let measureTemp = null;   // group holding the in-progress start marker
 
+    function disposeGroup(g) {
+        if (!g) return;
+        scene.remove(g);
+        g.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (child.material.map) child.material.map.dispose();
+                child.material.dispose();
+            }
+        });
+    }
+
+    // Remove every measurement (completed + in-progress)
     function clearMeasure() {
-        if (measureGroup) {
-            scene.remove(measureGroup);
-            measureGroup.traverse(child => {
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) {
-                    if (child.material.map) child.material.map.dispose();
-                    child.material.dispose();
-                }
-            });
-            measureGroup = null;
-        }
+        for (const m of measurements) disposeGroup(m.group);
+        measurements = [];
+        disposeGroup(measureTemp); measureTemp = null;
         measurePtA = null;
+    }
+
+    // Drop only the half-placed measurement (after the first click). Returns
+    // true if something was actually cancelled.
+    function cancelMeasure() {
+        if (!measurePtA && !measureTemp) return false;
+        disposeGroup(measureTemp); measureTemp = null;
+        measurePtA = null;
+        return true;
+    }
+
+    // Remove the most recent measurement (or the in-progress one first).
+    function deleteLastMeasure() {
+        if (measurePtA || measureTemp) return cancelMeasure();
+        const m = measurements.pop();
+        if (m) { disposeGroup(m.group); return true; }
+        return false;
     }
 
     function measureMarker(pt, color) {
@@ -7489,7 +7542,34 @@ const Scene = (() => {
         return m;
     }
 
+    // If the click lands on an existing measurement's midpoint handle, delete
+    // that measurement and report it (so a mis-clicked line can be removed).
+    function tryDeleteMeasureAt(e) {
+        if (!measurements.length) return false;
+        const rect = renderer.domElement.getBoundingClientRect();
+        const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        let hitIdx = -1, hitD = 14;   // px tolerance for grabbing the handle
+        for (let i = 0; i < measurements.length; i++) {
+            const m = measurements[i];
+            const s = toScreen(new THREE.Vector3(m.mid.x, m.mid.y, m.mid.z), rect);
+            if (s.behind) continue;
+            const d = Math.hypot(s.x - cursor.x, s.y - cursor.y);
+            if (d < hitD) { hitD = d; hitIdx = i; }
+        }
+        if (hitIdx >= 0) {
+            disposeGroup(measurements[hitIdx].group);
+            measurements.splice(hitIdx, 1);
+            if (editorCallbacks.onMeasure) editorCallbacks.onMeasure(null, null);
+            return true;
+        }
+        return false;
+    }
+
     function handleMeasureClick(e) {
+        // A click on an existing measurement's handle removes it (only when not
+        // mid-measurement, so the second point can still land anywhere).
+        if (!measurePtA && tryDeleteMeasureAt(e)) return;
+
         // Prefer the snapped key point from hover; fall back to a raw pick
         const pt = currentSnap
             ? { x: currentSnap.x, y: currentSnap.y, z: currentSnap.z }
@@ -7497,17 +7577,19 @@ const Scene = (() => {
         if (!pt) return;
 
         if (!measurePtA) {
-            clearMeasure();
+            cancelMeasure();
             measurePtA = pt;
-            measureGroup = new THREE.Group();
-            measureGroup.add(measureMarker(pt, 0x2ee6a8));
-            scene.add(measureGroup);
+            measureTemp = new THREE.Group();
+            measureTemp.add(measureMarker(pt, 0x2ee6a8));
+            scene.add(measureTemp);
             if (editorCallbacks.onMeasure) editorCallbacks.onMeasure(pt, null);
             return;
         }
 
         const a = measurePtA, b = pt;
-        measureGroup.add(measureMarker(b, 0x2ee6a8));
+        const group = new THREE.Group();
+        group.add(measureMarker(a, 0x2ee6a8));
+        group.add(measureMarker(b, 0x2ee6a8));
 
         const lineGeom = new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(a.x, a.y, a.z),
@@ -7517,7 +7599,7 @@ const Scene = (() => {
             color: 0x2ee6a8, depthTest: false
         }));
         line.renderOrder = 10;
-        measureGroup.add(line);
+        group.add(line);
 
         const IN = 2.54, FT = 30.48;
         const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
@@ -7531,9 +7613,24 @@ const Scene = (() => {
             fontSize: 14, color: '#2ee6a8', worldHeight: 6,
             background: 'rgba(13,17,23,0.75)'
         });
-        label.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 + 8, (a.z + b.z) / 2);
-        measureGroup.add(label);
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+        label.position.set(mid.x, mid.y + 8, mid.z);
+        group.add(label);
 
+        // Deletable midpoint handle — click it (in Measure mode) to remove the line
+        const handle = new THREE.Mesh(
+            new THREE.SphereGeometry(2.1, 12, 12),
+            new THREE.MeshBasicMaterial({
+                color: 0x2ee6a8, depthTest: false, transparent: true, opacity: 0.9
+            }));
+        handle.position.set(mid.x, mid.y, mid.z);
+        handle.renderOrder = 11;
+        group.add(handle);
+
+        scene.add(group);
+        measurements.push({ group, a, b, mid });
+
+        disposeGroup(measureTemp); measureTemp = null;
         measurePtA = null;
         if (editorCallbacks.onMeasure) editorCallbacks.onMeasure(a, b);
     }
@@ -7790,6 +7887,40 @@ const Scene = (() => {
             ? { x: target.x, y: target.y, z: target.z } : null;
     }
 
+    // Wheel zoom that homes on the cursor. The focus point is whatever the
+    // cursor ray hits (a volume, an isodose surface, or the ground); the whole
+    // camera+target rig is scaled about that point, so the pivot slides toward
+    // where you zoom and rotation follows.
+    function onWheelZoom(e) {
+        e.preventDefault();
+        if (!controls || !camera) return;
+        const rc = rayFromEvent(e);
+
+        let focus = null;
+        const targets = pickMeshes.slice();
+        if (isodoseMeshes && isodoseMeshes.length) targets.push(...isodoseMeshes);
+        const hits = targets.length ? rc.intersectObjects(targets, false) : [];
+        if (hits.length) focus = hits[0].point.clone();
+        if (!focus) { const g = pickGroundPoint(rc); if (g) focus = new THREE.Vector3(g.x, g.y, g.z); }
+        if (!focus) {
+            const d = camera.position.distanceTo(controls.target);
+            focus = camera.position.clone().add(rc.ray.direction.clone().normalize().multiplyScalar(d));
+        }
+
+        const oldDist = camera.position.distanceTo(controls.target);
+        let scale = e.deltaY < 0 ? 0.82 : (1 / 0.82);   // <1 zoom in, >1 zoom out
+        const nd = oldDist * scale;
+        if (nd < controls.minDistance) scale = controls.minDistance / oldDist;
+        else if (nd > controls.maxDistance) scale = controls.maxDistance / oldDist;
+
+        // newP = focus + scale*(P - focus), applied to both camera and target
+        const camVec = camera.position.clone().sub(focus).multiplyScalar(scale);
+        const tgtVec = controls.target.clone().sub(focus).multiplyScalar(scale);
+        camera.position.copy(focus).add(camVec);
+        controls.target.copy(focus).add(tgtVec);
+        controls.update();
+    }
+
     function updateHover(e) {
         clearHover();
         const rect = renderer.domElement.getBoundingClientRect();
@@ -7807,7 +7938,34 @@ const Scene = (() => {
             const d = Math.hypot(s.x - cursor.x, s.y - cursor.y);
             if (d > SNAP_TOL) continue;
             const score = f.prio * 10000 + d;
-            if (!best || score < best.score) best = { f, score };
+            if (!best || score < best.score) best = { f, score, d };
+        }
+
+        // Snap to grid points (ray-fan vertices) on any visible isodose surface
+        let isoSnap = null;
+        if (isodoseMeshes && isodoseMeshes.length) {
+            const ihits = rc.intersectObjects(isodoseMeshes, false);
+            if (ihits.length) {
+                const ih = ihits[0];
+                const pos = ih.object.geometry.attributes.position;
+                let bestV = null, bestVD = Infinity;
+                for (const idx of [ih.face.a, ih.face.b, ih.face.c]) {
+                    const v = new THREE.Vector3().fromBufferAttribute(pos, idx)
+                        .applyMatrix4(ih.object.matrixWorld);
+                    const dd = v.distanceToSquared(ih.point);
+                    if (dd < bestVD) { bestVD = dd; bestV = v; }
+                }
+                if (bestV) {
+                    const s = toScreen(bestV, rect);
+                    const lvl = ih.object.userData.level || {};
+                    const val = lvl.value_mrem_hr != null ? lvl.value_mrem_hr : lvl.value;
+                    const pd = s.behind ? Infinity : Math.hypot(s.x - cursor.x, s.y - cursor.y);
+                    if (pd <= SNAP_TOL) {
+                        isoSnap = { p: bestV, d: pd,
+                            label: 'Isodose' + (val != null ? ' ' + val + ' mrem/hr' : '') };
+                    }
+                }
+            }
         }
 
         hoverGroup = new THREE.Group();
@@ -7819,7 +7977,13 @@ const Scene = (() => {
             if (vis) addFaceHighlight(vis, hit);
         }
 
-        if (best) {
+        // Isodose grid point wins if it is the closest snap under the cursor
+        if (isoSnap && isoSnap.d < (best ? best.d : Infinity)) {
+            const p = isoSnap.p;
+            currentSnap = { x: p.x, y: p.y, z: p.z, type: isoSnap.label };
+            hoverGroup.add(makeGlyph('edge', p));
+            addSnapLabel(isoSnap.label, p);
+        } else if (best) {
             const p = best.f.p;
             currentSnap = { x: p.x, y: p.y, z: p.z, type: best.f.label };
             hoverGroup.add(makeGlyph(best.f.type, p));
@@ -7919,7 +8083,9 @@ const Scene = (() => {
 
     // --- Interaction mode ---
     function setMode(mode) {
-        if (interactionMode === 'measure' && mode !== 'measure') clearMeasure();
+        // Leaving Measure keeps finished measurements on screen; only the
+        // half-placed one is dropped.
+        if (interactionMode === 'measure' && mode !== 'measure') cancelMeasure();
         clearHover();
         interactionMode = mode;
         if (renderer) {
@@ -7951,6 +8117,8 @@ const Scene = (() => {
         setMode,
         getMode,
         clearMeasure,
+        cancelMeasure,
+        deleteLastMeasure,
         getSnap: () => currentSnap,
         COLORS
     };
@@ -8024,6 +8192,7 @@ const Editor = (() => {
 
     // Full refresh: 3D scene + panels, selection preserved
     function refreshAll(frame) {
+        resolveConstraints();   // mated parts follow geometry before we redraw
         if (hooks.refresh) hooks.refresh(!!frame);
         Scene.setSelected(selection);
         renderOutliner();
@@ -8256,13 +8425,12 @@ const Editor = (() => {
         return v.height || v.thickness || 0;
     }
 
-    function alignVolumes(moverId, targetId, mode) {
-        const mover = model.getVolume(moverId);
-        const target = model.getVolume(targetId);
-        if (!mover || !target || moverId === targetId) return;
-        pushUndo();
-
-        // Mover's bottom-center expressed in the target's local frame
+    // Pure solver: place `mover` relative to `target` for one mode. Reads the
+    // mover's current position for the axes a mode leaves free (e.g. Flush keeps
+    // the sideways offset). No undo/refresh/selection side effects, so it is
+    // safe to call repeatedly from the constraint resolver.
+    function solveAlign(mover, target, mode) {
+        if (!mover || !target || mover === target) return false;
         const q = target.worldToLocal(mover.position.x, mover.position.y, mover.position.z);
         let nq = null;
         switch (mode) {
@@ -8272,16 +8440,53 @@ const Editor = (() => {
             case 'flush':      nq = { x: q.x, y: 0, z: q.z }; break;
             case 'center':     nq = { x: 0, y: (volHeight(target) - volHeight(mover)) / 2, z: 0 }; break;
             case 'rot':        nq = null; break;
-            default: return;
+            default: return false;
         }
-
         mover.setRotation({ ...target.rotation });
         if (nq) mover.position = target.localToWorld(nq.x, nq.y, nq.z);
+        return true;
+    }
+
+    // Re-solve every persistent relationship so mated parts track geometry
+    // edits (a cover mated On Top of a tank follows when the tank grows taller).
+    // A few passes let short chains propagate; dangling constraints are dropped.
+    function resolveConstraints() {
+        const constrained = model.volumes.filter(v => v.constraint && v.constraint.targetId);
+        if (!constrained.length) return;
+        for (let pass = 0; pass < 4; pass++) {
+            for (const v of constrained) {
+                const t = model.getVolume(v.constraint.targetId);
+                if (!t || t === v) { v.constraint = null; continue; }
+                solveAlign(v, t, v.constraint.mode);
+            }
+        }
+    }
+
+    function alignVolumes(moverId, targetId, mode) {
+        const mover = model.getVolume(moverId);
+        const target = model.getVolume(targetId);
+        if (!mover || !target || moverId === targetId) return;
+        pushUndo();
+
+        if (!solveAlign(mover, target, mode)) return;
+        // Persist the relationship so it follows later geometry changes.
+        mover.constraint = { targetId: targetId, mode: mode };
+        resolveConstraints();
 
         refreshAll(false);
         select(moverId);
         const label = (ALIGN_MODES.find(m => m.key === mode) || {}).label || mode;
-        status(label + ': ' + displayName(mover) + ' → ' + displayName(target));
+        status(label + ' (linked): ' + displayName(mover) + ' → ' + displayName(target) +
+            ' — it now follows the target. Right-click → Remove relationship to unlink.');
+    }
+
+    function removeConstraint(id) {
+        const v = model.getVolume(id);
+        if (!v || !v.constraint) { status('No relationship on this object'); return; }
+        pushUndo();
+        v.constraint = null;
+        refreshAll(false);
+        status('Relationship removed — ' + displayName(v) + ' is free again');
     }
 
     // -----------------------------------------------------------------------
@@ -8457,10 +8662,12 @@ const Editor = (() => {
             'You can also type coordinates in the Dose Point panel on the left.'],
         measure: ['Measure (M)',
             'Hover an object — the cursor snaps to the nearest key point (corner, edge midpoint, ' +
-            'rim quadrant, or face/axis center) and the snapped feature is labelled. Click that point, ' +
-            'then a second one; a dashed preview tracks the second point. The label shows the straight-line ' +
-            'distance plus the X/Y/Z offsets. Example: snap the plug’s Top center, then the floor’s ' +
-            'Bottom center for exact height. Click again for a new measurement. Esc = exit.'],
+            'rim quadrant, face/axis center, or a grid point on a visible isodose surface) and the snapped ' +
+            'feature is labelled. Click that point, then a second one; a dashed preview tracks the second ' +
+            'point. The label shows the straight-line distance plus the X/Y/Z offsets. Measurements stay on ' +
+            'screen and stack up. To remove one, click its green midpoint dot; Del removes the last, ' +
+            'Esc cancels a half-placed one. Example: snap the plug’s Top center, then the floor’s ' +
+            'Bottom center for exact height.'],
         dimension: ['Smart Dimension (S)',
             'Hover to highlight the object and the specific face under the cursor. Click any object — a popup ' +
             'appears at your cursor with its dimensions (radius, height, width…). ' +
@@ -8521,10 +8728,20 @@ const Editor = (() => {
                 if (selection) duplicateVolume(selection);
                 return;
             }
-            if (e.key === 'Delete' && selection) { deleteVolume(selection); return; }
+            const inMeasure = Scene.getMode && Scene.getMode() === 'measure';
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                // In Measure mode, Delete removes the most recent measurement
+                if (inMeasure && Scene.deleteLastMeasure && Scene.deleteLastMeasure()) {
+                    status('Measurement removed'); return;
+                }
+                if (e.key === 'Delete' && selection) { deleteVolume(selection); return; }
+            }
             if (e.key === 'Escape') {
                 hideContextMenu(); hidePipeBuilder(); hideDimEditor();
                 if (mateState) { cancelMate('Relationship cancelled'); return; }
+                if (inMeasure && Scene.cancelMeasure && Scene.cancelMeasure()) {
+                    status('Measurement cancelled'); return;
+                }
                 select(null); setMode('select');
                 return;
             }
@@ -8814,6 +9031,10 @@ const Editor = (() => {
             ctxMenuEl.appendChild(menuItem(
                 vol.enabled === false ? 'Include in calculation' : 'Exclude from calculation',
                 () => toggleEnabled(id)));
+            if (vol.constraint) {
+                ctxMenuEl.appendChild(menuItem('Remove relationship (unlink)',
+                    () => removeConstraint(id)));
+            }
             ctxMenuEl.appendChild(menuDivider());
             if (vol.role !== 'source') {
                 ctxMenuEl.appendChild(menuItem('Make Source (radioactive)', () => setRole(id, 'source')));
@@ -9273,6 +9494,7 @@ const Editor = (() => {
                 plugEnabled: document.getElementById('plugEnabled').checked,
                 plugMaterial: document.getElementById('plugMaterial').value,
                 plugThickness: val('plugThickness'),
+                plugOuterDia: val('plugOuterDia'),
                 isotope: document.getElementById('sourceIsotope').value,
                 activity: val('sourceActivity'),
                 liquidLevel: val('liquidLevel'),
@@ -9304,6 +9526,7 @@ const Editor = (() => {
             document.getElementById('plugEnabled').checked = t.plugEnabled !== false;
             set('plugMaterial', t.plugMaterial);
             set('plugThickness', t.plugThickness);
+            set('plugOuterDia', t.plugOuterDia);
             set('sourceIsotope', t.isotope);
             set('sourceActivity', t.activity);
             set('liquidLevel', t.liquidLevel);
@@ -9350,7 +9573,7 @@ const Editor = (() => {
             data.forEach((layer, i) => {
                 const div = document.createElement('div');
                 div.className = 'layer-item';
-                div.innerHTML = `<select onchange="${varName}[${i}].material=this.value"><option value="steel" ${layer.material==='steel'?'selected':''}>Steel</option><option value="lead" ${layer.material==='lead'?'selected':''}>Lead</option><option value="concrete" ${layer.material==='concrete'?'selected':''}>Concrete</option><option value="water" ${layer.material==='water'?'selected':''}>Water</option></select><input type="number" value="${layer.thickness}" step="0.25" min="0.01" onchange="${varName}[${i}].thickness=parseFloat(this.value)"><span class="unit">in</span><button class="remove-btn" onclick="removeLayer('${containerId}',${i})">&times;</button>`;
+                div.innerHTML = `<select onchange="${varName}[${i}].material=this.value"><option value="steel" ${layer.material==='steel'?'selected':''}>Steel</option><option value="lead" ${layer.material==='lead'?'selected':''}>Lead</option><option value="concrete" ${layer.material==='concrete'?'selected':''}>Concrete</option><option value="water" ${layer.material==='water'?'selected':''}>Water</option><option value="air" ${layer.material==='air'?'selected':''}>Air (gap)</option></select><input type="number" value="${layer.thickness}" step="0.25" min="0.01" onchange="${varName}[${i}].thickness=parseFloat(this.value)"><span class="unit">in</span><button class="remove-btn" onclick="removeLayer('${containerId}',${i})">&times;</button>`;
                 container.appendChild(div);
             });
         }
@@ -9389,9 +9612,11 @@ const Editor = (() => {
                     openingRadius: parseFloat(document.getElementById('lidOpening').value) * IN
                 };
                 if (document.getElementById('plugEnabled').checked) {
+                    const plugOuterDia = parseFloat(document.getElementById('plugOuterDia').value) || 0;
                     config.plug = {
                         materialKey: document.getElementById('plugMaterial').value,
-                        thickness: parseFloat(document.getElementById('plugThickness').value) * IN
+                        thickness: parseFloat(document.getElementById('plugThickness').value) * IN,
+                        outerRadius: plugOuterDia > 0 ? (plugOuterDia / 2) * IN : 0
                     };
                 }
             }
@@ -10163,11 +10388,13 @@ const Editor = (() => {
             [5,  0xd9, 0x46, 0xef]    // 100k magenta
         ];
 
+        // Fill alpha is kept low so the color wash reads as a soft background and
+        // the isodose rings drawn on top stay crisp (was muddy at high alpha).
         function heatColor(mrem) {
             const lg = Math.log10(Math.max(mrem, 1e-6));
-            if (lg <= HEAT_STOPS[0][0]) return [30, 64, 175, 60];   // faint blue background
+            if (lg <= HEAT_STOPS[0][0]) return [30, 64, 175, 40];   // faint blue background
             const last = HEAT_STOPS[HEAT_STOPS.length - 1];
-            if (lg >= last[0]) return [last[1], last[2], last[3], 230];
+            if (lg >= last[0]) return [last[1], last[2], last[3], 150];
             for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
                 const a = HEAT_STOPS[i], b = HEAT_STOPS[i + 1];
                 if (lg >= a[0] && lg <= b[0]) {
@@ -10176,11 +10403,80 @@ const Editor = (() => {
                         Math.round(a[1] + t * (b[1] - a[1])),
                         Math.round(a[2] + t * (b[2] - a[2])),
                         Math.round(a[3] + t * (b[3] - a[3])),
-                        200
+                        130
                     ];
                 }
             }
             return [0, 0, 0, 0];
+        }
+
+        // Distinct, high-contrast colors for isodose contour rings
+        const RING_COLORS = ['#ffffff', '#5ad1ff', '#ffe14d', '#ff8fae', '#b388ff', '#7CFC00'];
+
+        function parseRingLevels() {
+            return (document.getElementById('heatRings').value || '')
+                .split(/[,\s]+/).map(s => parseFloat(s))
+                .filter(v => isFinite(v) && v > 0)
+                .sort((a, b) => b - a);
+        }
+
+        // Trace dose-rate contours on the (upscaled) heat-map canvas via marching
+        // squares and measure each ring's distance from the source center.
+        function drawHeatRings(ctx, grid, n, cell, levels, area, center) {
+            const IN = Geometry.INCH_TO_CM;
+            const px = g => (g + 0.5) * cell;                     // grid coord -> px
+            const wX = gx => area.minX + gx / (n - 1) * (area.maxX - area.minX);
+            const wZ = gy => area.minZ + gy / (n - 1) * (area.maxZ - area.minZ);
+            const stats = [];
+            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            levels.forEach((L, li) => {
+                const col = RING_COLORS[li % RING_COLORS.length];
+                ctx.strokeStyle = col; ctx.lineWidth = 2.4;
+                const dists = []; let rightMost = null;
+                for (let j = 0; j < n - 1; j++) {
+                    for (let i = 0; i < n - 1; i++) {
+                        const v00 = grid[j * n + i], v10 = grid[j * n + i + 1];
+                        const v01 = grid[(j + 1) * n + i], v11 = grid[(j + 1) * n + i + 1];
+                        const cr = [];
+                        const edge = (a, b, x0, y0, x1, y1) => {
+                            if ((a - L) * (b - L) < 0) {
+                                const t = (L - a) / (b - a);
+                                cr.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
+                            }
+                        };
+                        edge(v00, v10, i, j, i + 1, j);
+                        edge(v10, v11, i + 1, j, i + 1, j + 1);
+                        edge(v01, v11, i, j + 1, i + 1, j + 1);
+                        edge(v00, v01, i, j, i, j + 1);
+                        for (let k = 0; k + 1 < cr.length; k += 2) {
+                            const p = cr[k], q = cr[k + 1];
+                            ctx.beginPath();
+                            ctx.moveTo(px(p[0]), px(p[1]));
+                            ctx.lineTo(px(q[0]), px(q[1]));
+                            ctx.stroke();
+                            [p, q].forEach(pt => {
+                                dists.push(Math.hypot(wX(pt[0]) - center.x, wZ(pt[1]) - center.z));
+                                if (!rightMost || pt[0] > rightMost[0]) rightMost = pt;
+                            });
+                        }
+                    }
+                }
+                if (dists.length) {
+                    const mn = Math.min(...dists), mx = Math.max(...dists);
+                    const avg = dists.reduce((a, b) => a + b, 0) / dists.length;
+                    stats.push({ value: L, color: col, minIn: mn / IN, maxIn: mx / IN, avgIn: avg / IN });
+                    if (rightMost) {
+                        ctx.fillStyle = col;
+                        ctx.font = 'bold ' + Math.max(11, Math.round(cell * 1.1)) + 'px Segoe UI, Arial';
+                        ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 3;
+                        ctx.fillText(L + '', px(rightMost[0]) + 5, px(rightMost[1]) + 4);
+                        ctx.shadowBlur = 0;
+                    }
+                } else {
+                    stats.push({ value: L, color: col, minIn: null });
+                }
+            });
+            return stats;
         }
 
         function generateHeatmap() {
@@ -10213,6 +10509,7 @@ const Editor = (() => {
             canvas.width = n; canvas.height = n;
             const ctx = canvas.getContext('2d');
             const img = ctx.createImageData(n, n);
+            const doseGrid = new Float32Array(n * n);   // raw dose for contour rings
 
             let row = 0;
             const t0 = performance.now();
@@ -10222,6 +10519,7 @@ const Editor = (() => {
                     const wx = area.minX + (col / (n - 1)) * (area.maxX - area.minX);
                     const dose = Physics.volumetricSourceDose(
                         elements, isotopeKey, { x: wx, y: y, z: wz }, model, calcOpts).total_mrem_hr;
+                    doseGrid[row * n + col] = dose;
                     const c = heatColor(dose);
                     const o = (row * n + col) * 4;
                     img.data[o] = c[0]; img.data[o + 1] = c[1];
@@ -10232,7 +10530,34 @@ const Editor = (() => {
                 if (row < n) { setTimeout(doRow, 0); return; }
 
                 ctx.putImageData(img, 0, 0);
-                Scene.showHeatmap(canvas, area);
+
+                // Upscale to a crisp display canvas, then overlay contour rings
+                const cell = Math.max(4, Math.floor(640 / n));
+                const disp = document.createElement('canvas');
+                disp.width = n * cell; disp.height = n * cell;
+                const dctx = disp.getContext('2d');
+                dctx.imageSmoothingEnabled = true;
+                dctx.drawImage(canvas, 0, 0, disp.width, disp.height);
+
+                const ringTable = document.getElementById('heatRingTable');
+                ringTable.innerHTML = '';
+                if (document.getElementById('heatRingsOn').checked) {
+                    const levels = parseRingLevels();
+                    if (levels.length) {
+                        const stats = drawHeatRings(dctx, doseGrid, n, cell, levels, area, { x: cx, z: cz });
+                        let rows = '<tr><th>Ring</th><th>Distance from source</th></tr>';
+                        stats.forEach(s => {
+                            const dist = s.minIn == null
+                                ? '<span style="color:#8b949e">not on map</span>'
+                                : s.avgIn.toFixed(0) + '"  (' + s.minIn.toFixed(0) + '–' + s.maxIn.toFixed(0) + '")';
+                            rows += '<tr><td><span style="color:' + s.color + '">&#9679;</span> ' +
+                                s.value + ' mrem/hr</td><td>' + dist + '</td></tr>';
+                        });
+                        ringTable.innerHTML = rows;
+                    }
+                }
+
+                Scene.showHeatmap(disp, area);
                 document.getElementById('heatLegend').style.display = '';
                 btn.disabled = false;
                 btn.textContent = 'Generate Heat Map';

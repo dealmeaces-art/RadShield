@@ -62,6 +62,7 @@ const Editor = (() => {
 
     // Full refresh: 3D scene + panels, selection preserved
     function refreshAll(frame) {
+        resolveConstraints();   // mated parts follow geometry before we redraw
         if (hooks.refresh) hooks.refresh(!!frame);
         Scene.setSelected(selection);
         renderOutliner();
@@ -294,13 +295,12 @@ const Editor = (() => {
         return v.height || v.thickness || 0;
     }
 
-    function alignVolumes(moverId, targetId, mode) {
-        const mover = model.getVolume(moverId);
-        const target = model.getVolume(targetId);
-        if (!mover || !target || moverId === targetId) return;
-        pushUndo();
-
-        // Mover's bottom-center expressed in the target's local frame
+    // Pure solver: place `mover` relative to `target` for one mode. Reads the
+    // mover's current position for the axes a mode leaves free (e.g. Flush keeps
+    // the sideways offset). No undo/refresh/selection side effects, so it is
+    // safe to call repeatedly from the constraint resolver.
+    function solveAlign(mover, target, mode) {
+        if (!mover || !target || mover === target) return false;
         const q = target.worldToLocal(mover.position.x, mover.position.y, mover.position.z);
         let nq = null;
         switch (mode) {
@@ -310,16 +310,53 @@ const Editor = (() => {
             case 'flush':      nq = { x: q.x, y: 0, z: q.z }; break;
             case 'center':     nq = { x: 0, y: (volHeight(target) - volHeight(mover)) / 2, z: 0 }; break;
             case 'rot':        nq = null; break;
-            default: return;
+            default: return false;
         }
-
         mover.setRotation({ ...target.rotation });
         if (nq) mover.position = target.localToWorld(nq.x, nq.y, nq.z);
+        return true;
+    }
+
+    // Re-solve every persistent relationship so mated parts track geometry
+    // edits (a cover mated On Top of a tank follows when the tank grows taller).
+    // A few passes let short chains propagate; dangling constraints are dropped.
+    function resolveConstraints() {
+        const constrained = model.volumes.filter(v => v.constraint && v.constraint.targetId);
+        if (!constrained.length) return;
+        for (let pass = 0; pass < 4; pass++) {
+            for (const v of constrained) {
+                const t = model.getVolume(v.constraint.targetId);
+                if (!t || t === v) { v.constraint = null; continue; }
+                solveAlign(v, t, v.constraint.mode);
+            }
+        }
+    }
+
+    function alignVolumes(moverId, targetId, mode) {
+        const mover = model.getVolume(moverId);
+        const target = model.getVolume(targetId);
+        if (!mover || !target || moverId === targetId) return;
+        pushUndo();
+
+        if (!solveAlign(mover, target, mode)) return;
+        // Persist the relationship so it follows later geometry changes.
+        mover.constraint = { targetId: targetId, mode: mode };
+        resolveConstraints();
 
         refreshAll(false);
         select(moverId);
         const label = (ALIGN_MODES.find(m => m.key === mode) || {}).label || mode;
-        status(label + ': ' + displayName(mover) + ' → ' + displayName(target));
+        status(label + ' (linked): ' + displayName(mover) + ' → ' + displayName(target) +
+            ' — it now follows the target. Right-click → Remove relationship to unlink.');
+    }
+
+    function removeConstraint(id) {
+        const v = model.getVolume(id);
+        if (!v || !v.constraint) { status('No relationship on this object'); return; }
+        pushUndo();
+        v.constraint = null;
+        refreshAll(false);
+        status('Relationship removed — ' + displayName(v) + ' is free again');
     }
 
     // -----------------------------------------------------------------------
@@ -495,10 +532,12 @@ const Editor = (() => {
             'You can also type coordinates in the Dose Point panel on the left.'],
         measure: ['Measure (M)',
             'Hover an object — the cursor snaps to the nearest key point (corner, edge midpoint, ' +
-            'rim quadrant, or face/axis center) and the snapped feature is labelled. Click that point, ' +
-            'then a second one; a dashed preview tracks the second point. The label shows the straight-line ' +
-            'distance plus the X/Y/Z offsets. Example: snap the plug’s Top center, then the floor’s ' +
-            'Bottom center for exact height. Click again for a new measurement. Esc = exit.'],
+            'rim quadrant, face/axis center, or a grid point on a visible isodose surface) and the snapped ' +
+            'feature is labelled. Click that point, then a second one; a dashed preview tracks the second ' +
+            'point. The label shows the straight-line distance plus the X/Y/Z offsets. Measurements stay on ' +
+            'screen and stack up. To remove one, click its green midpoint dot; Del removes the last, ' +
+            'Esc cancels a half-placed one. Example: snap the plug’s Top center, then the floor’s ' +
+            'Bottom center for exact height.'],
         dimension: ['Smart Dimension (S)',
             'Hover to highlight the object and the specific face under the cursor. Click any object — a popup ' +
             'appears at your cursor with its dimensions (radius, height, width…). ' +
@@ -559,10 +598,20 @@ const Editor = (() => {
                 if (selection) duplicateVolume(selection);
                 return;
             }
-            if (e.key === 'Delete' && selection) { deleteVolume(selection); return; }
+            const inMeasure = Scene.getMode && Scene.getMode() === 'measure';
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                // In Measure mode, Delete removes the most recent measurement
+                if (inMeasure && Scene.deleteLastMeasure && Scene.deleteLastMeasure()) {
+                    status('Measurement removed'); return;
+                }
+                if (e.key === 'Delete' && selection) { deleteVolume(selection); return; }
+            }
             if (e.key === 'Escape') {
                 hideContextMenu(); hidePipeBuilder(); hideDimEditor();
                 if (mateState) { cancelMate('Relationship cancelled'); return; }
+                if (inMeasure && Scene.cancelMeasure && Scene.cancelMeasure()) {
+                    status('Measurement cancelled'); return;
+                }
                 select(null); setMode('select');
                 return;
             }
@@ -852,6 +901,10 @@ const Editor = (() => {
             ctxMenuEl.appendChild(menuItem(
                 vol.enabled === false ? 'Include in calculation' : 'Exclude from calculation',
                 () => toggleEnabled(id)));
+            if (vol.constraint) {
+                ctxMenuEl.appendChild(menuItem('Remove relationship (unlink)',
+                    () => removeConstraint(id)));
+            }
             ctxMenuEl.appendChild(menuDivider());
             if (vol.role !== 'source') {
                 ctxMenuEl.appendChild(menuItem('Make Source (radioactive)', () => setRole(id, 'source')));

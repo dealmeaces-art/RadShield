@@ -745,6 +745,7 @@
                             <div id="plugInputs">
                                 <div class="form-row"><label>Plug Material</label><select id="plugMaterial"><option value="steel" selected>Steel</option><option value="lead">Lead</option></select></div>
                                 <div class="form-row"><label>Plug Thickness</label><input type="number" id="plugThickness" value="5" step="0.25" min="0"><span class="unit">in</span></div>
+                                <div class="form-row" title="Set larger than the opening for a cover plate that overlaps the lid (0 = flush plug that just fills the opening)"><label>Plug Outer Ø</label><input type="number" id="plugOuterDia" value="0" step="0.5" min="0"><span class="unit">in</span></div>
                             </div>
                         </div>
                     </div>
@@ -846,8 +847,11 @@
                     <div class="form-row" title="Height of the survey plane above the floor (waist/chest height of a worker)"><label>Height</label><input type="number" id="heatHeight" value="40" step="6"><span class="unit">in</span></div>
                     <div class="form-row" title="Distance between survey grid points — smaller is smoother but slower"><label>Grid Spacing</label><input type="number" id="heatSpacing" value="12" step="3" min="2"><span class="unit">in</span></div>
                     <div class="form-row" title="The map covers this distance from the scene center in every direction"><label>Half-Extent</label><input type="number" id="heatHalf" value="120" step="12" min="12"><span class="unit">in</span></div>
+                    <div class="checkbox-row"><input type="checkbox" id="heatRingsOn" checked><label for="heatRingsOn">Draw isodose rings + distances</label></div>
+                    <div class="form-row" title="Dose-rate contours to trace on the map, in mrem/hr. Comma-separated; each becomes a labelled ring with its distance from the source."><label>Ring Levels</label><input type="text" id="heatRings" value="1000, 100, 10, 1" style="flex:1"><span class="unit">mrem/hr</span></div>
                     <button class="btn-calculate" id="heatBtn" style="background:#0e7490; border-color:#22d3ee;" title="Compute the dose rate at every grid point and paint the plane" onclick="generateHeatmap()">Generate Heat Map</button>
-                    <button class="add-layer-btn" style="margin-top:4px;" onclick="Scene.clearHeatmap(); document.getElementById('heatLegend').style.display='none'; setStatus('Heat map cleared');">Clear Heat Map</button>
+                    <button class="add-layer-btn" style="margin-top:4px;" onclick="Scene.clearHeatmap(); document.getElementById('heatLegend').style.display='none'; document.getElementById('heatRingTable').innerHTML=''; setStatus('Heat map cleared');">Clear Heat Map</button>
+                    <table class="sim-table" id="heatRingTable" style="margin-top:8px;"></table>
                     <div id="heatLegend" style="display:none; margin-top:8px;">
                         <div style="height:12px; border-radius:4px; background:linear-gradient(90deg,#1e40af,#2563eb,#22c55e,#eab308,#f97316,#ef4444,#d946ef);"></div>
                         <div style="display:flex; justify-content:space-between; font-size:10px; color:#8b949e; margin-top:2px;">
@@ -1240,6 +1244,7 @@
                 plugEnabled: document.getElementById('plugEnabled').checked,
                 plugMaterial: document.getElementById('plugMaterial').value,
                 plugThickness: val('plugThickness'),
+                plugOuterDia: val('plugOuterDia'),
                 isotope: document.getElementById('sourceIsotope').value,
                 activity: val('sourceActivity'),
                 liquidLevel: val('liquidLevel'),
@@ -1271,6 +1276,7 @@
             document.getElementById('plugEnabled').checked = t.plugEnabled !== false;
             set('plugMaterial', t.plugMaterial);
             set('plugThickness', t.plugThickness);
+            set('plugOuterDia', t.plugOuterDia);
             set('sourceIsotope', t.isotope);
             set('sourceActivity', t.activity);
             set('liquidLevel', t.liquidLevel);
@@ -1317,7 +1323,7 @@
             data.forEach((layer, i) => {
                 const div = document.createElement('div');
                 div.className = 'layer-item';
-                div.innerHTML = `<select onchange="${varName}[${i}].material=this.value"><option value="steel" ${layer.material==='steel'?'selected':''}>Steel</option><option value="lead" ${layer.material==='lead'?'selected':''}>Lead</option><option value="concrete" ${layer.material==='concrete'?'selected':''}>Concrete</option><option value="water" ${layer.material==='water'?'selected':''}>Water</option></select><input type="number" value="${layer.thickness}" step="0.25" min="0.01" onchange="${varName}[${i}].thickness=parseFloat(this.value)"><span class="unit">in</span><button class="remove-btn" onclick="removeLayer('${containerId}',${i})">&times;</button>`;
+                div.innerHTML = `<select onchange="${varName}[${i}].material=this.value"><option value="steel" ${layer.material==='steel'?'selected':''}>Steel</option><option value="lead" ${layer.material==='lead'?'selected':''}>Lead</option><option value="concrete" ${layer.material==='concrete'?'selected':''}>Concrete</option><option value="water" ${layer.material==='water'?'selected':''}>Water</option><option value="air" ${layer.material==='air'?'selected':''}>Air (gap)</option></select><input type="number" value="${layer.thickness}" step="0.25" min="0.01" onchange="${varName}[${i}].thickness=parseFloat(this.value)"><span class="unit">in</span><button class="remove-btn" onclick="removeLayer('${containerId}',${i})">&times;</button>`;
                 container.appendChild(div);
             });
         }
@@ -1356,9 +1362,11 @@
                     openingRadius: parseFloat(document.getElementById('lidOpening').value) * IN
                 };
                 if (document.getElementById('plugEnabled').checked) {
+                    const plugOuterDia = parseFloat(document.getElementById('plugOuterDia').value) || 0;
                     config.plug = {
                         materialKey: document.getElementById('plugMaterial').value,
-                        thickness: parseFloat(document.getElementById('plugThickness').value) * IN
+                        thickness: parseFloat(document.getElementById('plugThickness').value) * IN,
+                        outerRadius: plugOuterDia > 0 ? (plugOuterDia / 2) * IN : 0
                     };
                 }
             }
@@ -2130,11 +2138,13 @@
             [5,  0xd9, 0x46, 0xef]    // 100k magenta
         ];
 
+        // Fill alpha is kept low so the color wash reads as a soft background and
+        // the isodose rings drawn on top stay crisp (was muddy at high alpha).
         function heatColor(mrem) {
             const lg = Math.log10(Math.max(mrem, 1e-6));
-            if (lg <= HEAT_STOPS[0][0]) return [30, 64, 175, 60];   // faint blue background
+            if (lg <= HEAT_STOPS[0][0]) return [30, 64, 175, 40];   // faint blue background
             const last = HEAT_STOPS[HEAT_STOPS.length - 1];
-            if (lg >= last[0]) return [last[1], last[2], last[3], 230];
+            if (lg >= last[0]) return [last[1], last[2], last[3], 150];
             for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
                 const a = HEAT_STOPS[i], b = HEAT_STOPS[i + 1];
                 if (lg >= a[0] && lg <= b[0]) {
@@ -2143,11 +2153,80 @@
                         Math.round(a[1] + t * (b[1] - a[1])),
                         Math.round(a[2] + t * (b[2] - a[2])),
                         Math.round(a[3] + t * (b[3] - a[3])),
-                        200
+                        130
                     ];
                 }
             }
             return [0, 0, 0, 0];
+        }
+
+        // Distinct, high-contrast colors for isodose contour rings
+        const RING_COLORS = ['#ffffff', '#5ad1ff', '#ffe14d', '#ff8fae', '#b388ff', '#7CFC00'];
+
+        function parseRingLevels() {
+            return (document.getElementById('heatRings').value || '')
+                .split(/[,\s]+/).map(s => parseFloat(s))
+                .filter(v => isFinite(v) && v > 0)
+                .sort((a, b) => b - a);
+        }
+
+        // Trace dose-rate contours on the (upscaled) heat-map canvas via marching
+        // squares and measure each ring's distance from the source center.
+        function drawHeatRings(ctx, grid, n, cell, levels, area, center) {
+            const IN = Geometry.INCH_TO_CM;
+            const px = g => (g + 0.5) * cell;                     // grid coord -> px
+            const wX = gx => area.minX + gx / (n - 1) * (area.maxX - area.minX);
+            const wZ = gy => area.minZ + gy / (n - 1) * (area.maxZ - area.minZ);
+            const stats = [];
+            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            levels.forEach((L, li) => {
+                const col = RING_COLORS[li % RING_COLORS.length];
+                ctx.strokeStyle = col; ctx.lineWidth = 2.4;
+                const dists = []; let rightMost = null;
+                for (let j = 0; j < n - 1; j++) {
+                    for (let i = 0; i < n - 1; i++) {
+                        const v00 = grid[j * n + i], v10 = grid[j * n + i + 1];
+                        const v01 = grid[(j + 1) * n + i], v11 = grid[(j + 1) * n + i + 1];
+                        const cr = [];
+                        const edge = (a, b, x0, y0, x1, y1) => {
+                            if ((a - L) * (b - L) < 0) {
+                                const t = (L - a) / (b - a);
+                                cr.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
+                            }
+                        };
+                        edge(v00, v10, i, j, i + 1, j);
+                        edge(v10, v11, i + 1, j, i + 1, j + 1);
+                        edge(v01, v11, i, j + 1, i + 1, j + 1);
+                        edge(v00, v01, i, j, i, j + 1);
+                        for (let k = 0; k + 1 < cr.length; k += 2) {
+                            const p = cr[k], q = cr[k + 1];
+                            ctx.beginPath();
+                            ctx.moveTo(px(p[0]), px(p[1]));
+                            ctx.lineTo(px(q[0]), px(q[1]));
+                            ctx.stroke();
+                            [p, q].forEach(pt => {
+                                dists.push(Math.hypot(wX(pt[0]) - center.x, wZ(pt[1]) - center.z));
+                                if (!rightMost || pt[0] > rightMost[0]) rightMost = pt;
+                            });
+                        }
+                    }
+                }
+                if (dists.length) {
+                    const mn = Math.min(...dists), mx = Math.max(...dists);
+                    const avg = dists.reduce((a, b) => a + b, 0) / dists.length;
+                    stats.push({ value: L, color: col, minIn: mn / IN, maxIn: mx / IN, avgIn: avg / IN });
+                    if (rightMost) {
+                        ctx.fillStyle = col;
+                        ctx.font = 'bold ' + Math.max(11, Math.round(cell * 1.1)) + 'px Segoe UI, Arial';
+                        ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 3;
+                        ctx.fillText(L + '', px(rightMost[0]) + 5, px(rightMost[1]) + 4);
+                        ctx.shadowBlur = 0;
+                    }
+                } else {
+                    stats.push({ value: L, color: col, minIn: null });
+                }
+            });
+            return stats;
         }
 
         function generateHeatmap() {
@@ -2180,6 +2259,7 @@
             canvas.width = n; canvas.height = n;
             const ctx = canvas.getContext('2d');
             const img = ctx.createImageData(n, n);
+            const doseGrid = new Float32Array(n * n);   // raw dose for contour rings
 
             let row = 0;
             const t0 = performance.now();
@@ -2189,6 +2269,7 @@
                     const wx = area.minX + (col / (n - 1)) * (area.maxX - area.minX);
                     const dose = Physics.volumetricSourceDose(
                         elements, isotopeKey, { x: wx, y: y, z: wz }, model, calcOpts).total_mrem_hr;
+                    doseGrid[row * n + col] = dose;
                     const c = heatColor(dose);
                     const o = (row * n + col) * 4;
                     img.data[o] = c[0]; img.data[o + 1] = c[1];
@@ -2199,7 +2280,34 @@
                 if (row < n) { setTimeout(doRow, 0); return; }
 
                 ctx.putImageData(img, 0, 0);
-                Scene.showHeatmap(canvas, area);
+
+                // Upscale to a crisp display canvas, then overlay contour rings
+                const cell = Math.max(4, Math.floor(640 / n));
+                const disp = document.createElement('canvas');
+                disp.width = n * cell; disp.height = n * cell;
+                const dctx = disp.getContext('2d');
+                dctx.imageSmoothingEnabled = true;
+                dctx.drawImage(canvas, 0, 0, disp.width, disp.height);
+
+                const ringTable = document.getElementById('heatRingTable');
+                ringTable.innerHTML = '';
+                if (document.getElementById('heatRingsOn').checked) {
+                    const levels = parseRingLevels();
+                    if (levels.length) {
+                        const stats = drawHeatRings(dctx, doseGrid, n, cell, levels, area, { x: cx, z: cz });
+                        let rows = '<tr><th>Ring</th><th>Distance from source</th></tr>';
+                        stats.forEach(s => {
+                            const dist = s.minIn == null
+                                ? '<span style="color:#8b949e">not on map</span>'
+                                : s.avgIn.toFixed(0) + '"  (' + s.minIn.toFixed(0) + '–' + s.maxIn.toFixed(0) + '")';
+                            rows += '<tr><td><span style="color:' + s.color + '">&#9679;</span> ' +
+                                s.value + ' mrem/hr</td><td>' + dist + '</td></tr>';
+                        });
+                        ringTable.innerHTML = rows;
+                    }
+                }
+
+                Scene.showHeatmap(disp, area);
                 document.getElementById('heatLegend').style.display = '';
                 btn.disabled = false;
                 btn.textContent = 'Generate Heat Map';

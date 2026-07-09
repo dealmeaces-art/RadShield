@@ -240,9 +240,14 @@ is documented separately in <code>docs/DESIGN.md</code>.</div>
 <tr><th>Action</th><th>Mouse</th></tr>
 <tr><td>Orbit around the scene</td><td>Hold <b>left button</b> and drag</td></tr>
 <tr><td>Pan (slide sideways)</td><td>Hold <b>right button</b> and drag</td></tr>
-<tr><td>Zoom</td><td>Scroll wheel</td></tr>
+<tr><td>Zoom toward the cursor</td><td>Scroll wheel</td></tr>
 <tr><td>Refit everything in view</td><td><span class="ui">Re-frame 3D View</span> button at the bottom of the sidebar</td></tr>
 </table>
+
+<div class="tip"><b>The zoom follows your cursor.</b> Scrolling zooms toward whatever is under the mouse and
+carries the orbit pivot with it, so you can dive into one corner of a large scene and then rotate around
+<i>that</i> spot. Point at the far side of a 100&nbsp;ft building, scroll in, and orbit there — no need to
+re-frame the whole scene to inspect one detail.</div>
 
 <div class="tip"><b>Hover for help.</b> Nearly every button and field has a tooltip — rest the mouse on it for a second.
 The how-to bar at the bottom always describes the active tool.</div>
@@ -261,11 +266,14 @@ place a dose point, press Calculate. Five minutes, start to finish.</p>
         Example used in the figures: <b>18"</b> radius, <b>40"</b> tall.</li>
     <li>In <b>Wall Layers (inside → out)</b>, define the wall build-up, one row per material layer.
         Example: <b>0.5" Steel</b>, then <b>2" Lead</b>. Use <span class="ui">+ Add Wall Layer</span> for more layers;
-        the <b>×</b> deletes a row.</li>
+        the <b>×</b> deletes a row. Choose <b>Air (gap)</b> as a layer material to model a real air gap — e.g.
+        a lined tank with a void between the liner and the outer shell — so the spacing is represented instead
+        of assumed solid.</li>
     <li>In <b>Floor</b>, define the layers under the tank (example: <b>1" Steel</b>).</li>
     <li>In <b>Lid Configuration</b>, choose lid material and thickness. If the lid has an access hole, set
         <b>Opening Radius</b> &gt; 0 and optionally check <b>Plug installed</b> with the plug's material and thickness
-        (the plug fills the opening).</li>
+        (the plug fills the opening). Set <b>Plug Outer Ø</b> larger than the opening for a cover plate that
+        overlaps the lid — a bolt-down cover wider than the bore — or leave it 0 for a flush plug.</li>
     <li>In <b>Radioactive Source</b>, pick the <b>Isotope</b> and total <b>Activity</b> in curies, and set the
         <b>Liquid Level</b> (water depth from the tank floor).</li>
     <li>Choose the <b>Distribution</b> — where the activity is within the liquid:<br>
@@ -476,7 +484,7 @@ needs the higher number.</div>
 <h1 class="chapter" id="ch5"><span class="cnum">5</span>Positioning with Relationships</h1>
 
 <p class="lead">The <b>Relationships</b> ribbon group snaps one object into an exact pose relative to
-another — the same idea as assembly relationships in SolidEdge. No eyeballing with the Move arrows.</p>
+another. No eyeballing with the Move arrows.</p>
 
 <div class="procedure"><div class="ptitle">Procedure — apply a relationship</div>
 <ol>
@@ -509,17 +517,19 @@ another — the same idea as assembly relationships in SolidEdge. No eyeballing 
 <tr><td><b>Parallel</b></td><td>Orientation matched to the target; position unchanged.</td></tr>
 </table>
 
-<div class="note"><b>Relationships are one-shot snaps</b>, not persistent constraints. If you later move the
-target, the mover does not follow — re-apply the relationship. The same operations are also available by
-selecting the mover, right-clicking the target, and using the <b>Align … to this</b> submenu.</div>
+<div class="note"><b>Relationships are persistent.</b> Once applied, the mover stays linked to its target and
+follows later geometry changes — make a tank taller with Smart Dimension and a cover mated <b>On Top</b>
+rides up with it. To break the link, right-click the mover and choose <b>Remove relationship (unlink)</b>;
+it is then free to move on its own again. The same relationship operations are also available by selecting
+the mover, right-clicking the target, and using the <b>Align … to this</b> submenu.</div>
 
 <!-- ================= CH 6 ================= -->
 <h1 class="chapter" id="ch6"><span class="cnum">6</span>Measuring with smart snapping</h1>
 
 <p class="lead">The <span class="ui">Measure</span> tool reports the straight-line distance and the X / Y / Z
 offsets between any two points. Crucially, it doesn't make you aim at empty space — as you hover, the cursor
-<b>snaps to the real geometry</b> (corners, edges, rim quadrants, face and axis centers), the same key-point
-snapping you'd expect in SolidEdge. Every measurement is anchored to a feature you can name.</p>
+<b>snaps to the real geometry</b> (corners, edges, rim quadrants, face and axis centers). Every measurement
+is anchored to a feature you can name.</p>
 
 <h2>6.1&nbsp; How snapping works</h2>
 
@@ -603,9 +613,16 @@ bottom of the tank, with nothing to eyeball:</p>
 </ol>
 </div>
 
-<div class="tip"><b>Snapping helps Smart Dimension too.</b> In <span class="ui">Smart Dim</span> mode the same
-hover highlight shows exactly which object — and which face — you are about to click before the dimension
-popup opens, so you never edit the wrong part.</div>
+<div class="note"><b>Measurements stack, and are easy to undo.</b> Each finished measurement stays on screen so
+you can lay down several at once. To remove one, click its green midpoint dot; <span class="key">Del</span>
+removes the most recent, and <span class="key">Esc</span> cancels a half-placed one (after the first click).
+They persist when you switch tools, so you can measure, model, and measure again.</div>
+
+<div class="tip"><b>Snap to isodose surfaces.</b> When isodose surfaces are showing (Chapter 8), Measure also
+snaps to the grid points on those surfaces — so you can measure straight from a source or wall to a specific
+point on the 1&nbsp;mrem/hr boundary. And in <span class="ui">Smart Dim</span> mode the same hover highlight
+shows exactly which object — and which face — you are about to click before the dimension popup opens, so you
+never edit the wrong part.</div>
 
 <!-- ================= CH 7 ================= -->
 <h1 class="chapter" id="ch7"><span class="cnum">7</span>Controlling what is calculated</h1>
@@ -703,11 +720,20 @@ the same picture as a posted survey map, computed instead of measured.</p>
     <li>Set the <b>Height</b> of the survey plane (waist/chest height of a worker — 40" is typical).</li>
     <li>Set the <b>Grid Spacing</b> (12" default; smaller = smoother but slower) and the
         <b>Half-Extent</b> (how far the map reaches from the scene center).</li>
+    <li>Leave <b>Draw isodose rings + distances</b> checked and list the dose-rate contours you care about in
+        <b>Ring Levels</b> (mrem/hr, comma-separated — e.g. <b>1000, 100, 10, 1</b>). Each becomes a labelled
+        ring traced on the map.</li>
     <li>Press <span class="ui">Generate Heat Map</span> and watch the progress percentage.
         A 20&nbsp;ft map at 6" spacing takes a few seconds.</li>
-    <li><span class="ui">Clear Heat Map</span> removes it.</li>
+    <li>Read the <b>ring table</b> below the button: each level lists its average distance from the source and
+        the min–max spread, so you can post "1&nbsp;mrem/hr at ~5&nbsp;ft" directly. <span class="ui">Clear
+        Heat Map</span> removes everything.</li>
 </ol>
 </div>
+
+<div class="note"><b>Rings vs. wash.</b> The colored wash is deliberately faint so the crisp contour rings
+read clearly on top — the rings are the boundaries you actually post. Turn the rings off to see the smooth
+color field alone.</div>
 
 <figure>
     <img src="images/17_heatmap.png" alt="Survey heat map painted around the tank">

@@ -66,7 +66,16 @@ const Scene = (() => {
         controls.target.set(0, 40, 0);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = true;   // pan in the view plane, not world XZ
+        controls.minDistance = 2;
+        controls.maxDistance = 8000;
+        controls.enableZoom = false;          // replaced by zoom-to-cursor below
         controls.update();
+
+        // Zoom toward whatever is under the cursor and drag the orbit pivot with
+        // it, so after zooming into a corner of a large scene the view rotates
+        // about that corner instead of a fixed centre point.
+        renderer.domElement.addEventListener('wheel', onWheelZoom, { passive: false });
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.4));
         const dl = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -159,11 +168,15 @@ const Scene = (() => {
     // -----------------------------------------------------------------------
     function renderVolume(group, vol) {
         const isSource = vol.isSource;
-        const baseColor = isSource ? COLORS.source : (COLORS[vol.materialKey] || 0x888888);
+        // Air gaps (e.g. between a tank and its liner) render as a barely-there
+        // pale-blue shell so the gap reads as empty space, not a solid layer.
+        const isAir = vol.materialKey === 'air';
+        const baseColor = isSource ? COLORS.source
+            : (isAir ? 0x8fd3ff : (COLORS[vol.materialKey] || 0x888888));
         // Volumes excluded from the calculation draw as faint ghosts
         const ghost = vol.enabled === false;
         const opacity = ghost ? 0.06
-            : (isSource ? 0.5 : (vol.role === 'container' ? 0.35 : 0.3));
+            : (isAir ? 0.07 : (isSource ? 0.5 : (vol.role === 'container' ? 0.35 : 0.3)));
         const wireOpacity = ghost ? 0.15 : 0.5;
         const metalness = (vol.materialKey === 'steel' || vol.materialKey === 'lead') ? 0.7 : 0.1;
 
@@ -867,22 +880,45 @@ const Scene = (() => {
     // Measure tool: click two points (on volume surfaces or the ground);
     // draws markers, a line, and a distance label with X/Y/Z deltas.
     // =======================================================================
-    let measureGroup = null;
-    let measurePtA = null;
+    let measurements = [];    // completed: [{ group, a, b, mid }]
+    let measurePtA = null;    // first point of an in-progress measurement
+    let measureTemp = null;   // group holding the in-progress start marker
 
+    function disposeGroup(g) {
+        if (!g) return;
+        scene.remove(g);
+        g.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (child.material.map) child.material.map.dispose();
+                child.material.dispose();
+            }
+        });
+    }
+
+    // Remove every measurement (completed + in-progress)
     function clearMeasure() {
-        if (measureGroup) {
-            scene.remove(measureGroup);
-            measureGroup.traverse(child => {
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) {
-                    if (child.material.map) child.material.map.dispose();
-                    child.material.dispose();
-                }
-            });
-            measureGroup = null;
-        }
+        for (const m of measurements) disposeGroup(m.group);
+        measurements = [];
+        disposeGroup(measureTemp); measureTemp = null;
         measurePtA = null;
+    }
+
+    // Drop only the half-placed measurement (after the first click). Returns
+    // true if something was actually cancelled.
+    function cancelMeasure() {
+        if (!measurePtA && !measureTemp) return false;
+        disposeGroup(measureTemp); measureTemp = null;
+        measurePtA = null;
+        return true;
+    }
+
+    // Remove the most recent measurement (or the in-progress one first).
+    function deleteLastMeasure() {
+        if (measurePtA || measureTemp) return cancelMeasure();
+        const m = measurements.pop();
+        if (m) { disposeGroup(m.group); return true; }
+        return false;
     }
 
     function measureMarker(pt, color) {
@@ -895,7 +931,34 @@ const Scene = (() => {
         return m;
     }
 
+    // If the click lands on an existing measurement's midpoint handle, delete
+    // that measurement and report it (so a mis-clicked line can be removed).
+    function tryDeleteMeasureAt(e) {
+        if (!measurements.length) return false;
+        const rect = renderer.domElement.getBoundingClientRect();
+        const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        let hitIdx = -1, hitD = 14;   // px tolerance for grabbing the handle
+        for (let i = 0; i < measurements.length; i++) {
+            const m = measurements[i];
+            const s = toScreen(new THREE.Vector3(m.mid.x, m.mid.y, m.mid.z), rect);
+            if (s.behind) continue;
+            const d = Math.hypot(s.x - cursor.x, s.y - cursor.y);
+            if (d < hitD) { hitD = d; hitIdx = i; }
+        }
+        if (hitIdx >= 0) {
+            disposeGroup(measurements[hitIdx].group);
+            measurements.splice(hitIdx, 1);
+            if (editorCallbacks.onMeasure) editorCallbacks.onMeasure(null, null);
+            return true;
+        }
+        return false;
+    }
+
     function handleMeasureClick(e) {
+        // A click on an existing measurement's handle removes it (only when not
+        // mid-measurement, so the second point can still land anywhere).
+        if (!measurePtA && tryDeleteMeasureAt(e)) return;
+
         // Prefer the snapped key point from hover; fall back to a raw pick
         const pt = currentSnap
             ? { x: currentSnap.x, y: currentSnap.y, z: currentSnap.z }
@@ -903,17 +966,19 @@ const Scene = (() => {
         if (!pt) return;
 
         if (!measurePtA) {
-            clearMeasure();
+            cancelMeasure();
             measurePtA = pt;
-            measureGroup = new THREE.Group();
-            measureGroup.add(measureMarker(pt, 0x2ee6a8));
-            scene.add(measureGroup);
+            measureTemp = new THREE.Group();
+            measureTemp.add(measureMarker(pt, 0x2ee6a8));
+            scene.add(measureTemp);
             if (editorCallbacks.onMeasure) editorCallbacks.onMeasure(pt, null);
             return;
         }
 
         const a = measurePtA, b = pt;
-        measureGroup.add(measureMarker(b, 0x2ee6a8));
+        const group = new THREE.Group();
+        group.add(measureMarker(a, 0x2ee6a8));
+        group.add(measureMarker(b, 0x2ee6a8));
 
         const lineGeom = new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(a.x, a.y, a.z),
@@ -923,7 +988,7 @@ const Scene = (() => {
             color: 0x2ee6a8, depthTest: false
         }));
         line.renderOrder = 10;
-        measureGroup.add(line);
+        group.add(line);
 
         const IN = 2.54, FT = 30.48;
         const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
@@ -937,9 +1002,24 @@ const Scene = (() => {
             fontSize: 14, color: '#2ee6a8', worldHeight: 6,
             background: 'rgba(13,17,23,0.75)'
         });
-        label.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 + 8, (a.z + b.z) / 2);
-        measureGroup.add(label);
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+        label.position.set(mid.x, mid.y + 8, mid.z);
+        group.add(label);
 
+        // Deletable midpoint handle — click it (in Measure mode) to remove the line
+        const handle = new THREE.Mesh(
+            new THREE.SphereGeometry(2.1, 12, 12),
+            new THREE.MeshBasicMaterial({
+                color: 0x2ee6a8, depthTest: false, transparent: true, opacity: 0.9
+            }));
+        handle.position.set(mid.x, mid.y, mid.z);
+        handle.renderOrder = 11;
+        group.add(handle);
+
+        scene.add(group);
+        measurements.push({ group, a, b, mid });
+
+        disposeGroup(measureTemp); measureTemp = null;
         measurePtA = null;
         if (editorCallbacks.onMeasure) editorCallbacks.onMeasure(a, b);
     }
@@ -1196,6 +1276,40 @@ const Scene = (() => {
             ? { x: target.x, y: target.y, z: target.z } : null;
     }
 
+    // Wheel zoom that homes on the cursor. The focus point is whatever the
+    // cursor ray hits (a volume, an isodose surface, or the ground); the whole
+    // camera+target rig is scaled about that point, so the pivot slides toward
+    // where you zoom and rotation follows.
+    function onWheelZoom(e) {
+        e.preventDefault();
+        if (!controls || !camera) return;
+        const rc = rayFromEvent(e);
+
+        let focus = null;
+        const targets = pickMeshes.slice();
+        if (isodoseMeshes && isodoseMeshes.length) targets.push(...isodoseMeshes);
+        const hits = targets.length ? rc.intersectObjects(targets, false) : [];
+        if (hits.length) focus = hits[0].point.clone();
+        if (!focus) { const g = pickGroundPoint(rc); if (g) focus = new THREE.Vector3(g.x, g.y, g.z); }
+        if (!focus) {
+            const d = camera.position.distanceTo(controls.target);
+            focus = camera.position.clone().add(rc.ray.direction.clone().normalize().multiplyScalar(d));
+        }
+
+        const oldDist = camera.position.distanceTo(controls.target);
+        let scale = e.deltaY < 0 ? 0.82 : (1 / 0.82);   // <1 zoom in, >1 zoom out
+        const nd = oldDist * scale;
+        if (nd < controls.minDistance) scale = controls.minDistance / oldDist;
+        else if (nd > controls.maxDistance) scale = controls.maxDistance / oldDist;
+
+        // newP = focus + scale*(P - focus), applied to both camera and target
+        const camVec = camera.position.clone().sub(focus).multiplyScalar(scale);
+        const tgtVec = controls.target.clone().sub(focus).multiplyScalar(scale);
+        camera.position.copy(focus).add(camVec);
+        controls.target.copy(focus).add(tgtVec);
+        controls.update();
+    }
+
     function updateHover(e) {
         clearHover();
         const rect = renderer.domElement.getBoundingClientRect();
@@ -1213,7 +1327,34 @@ const Scene = (() => {
             const d = Math.hypot(s.x - cursor.x, s.y - cursor.y);
             if (d > SNAP_TOL) continue;
             const score = f.prio * 10000 + d;
-            if (!best || score < best.score) best = { f, score };
+            if (!best || score < best.score) best = { f, score, d };
+        }
+
+        // Snap to grid points (ray-fan vertices) on any visible isodose surface
+        let isoSnap = null;
+        if (isodoseMeshes && isodoseMeshes.length) {
+            const ihits = rc.intersectObjects(isodoseMeshes, false);
+            if (ihits.length) {
+                const ih = ihits[0];
+                const pos = ih.object.geometry.attributes.position;
+                let bestV = null, bestVD = Infinity;
+                for (const idx of [ih.face.a, ih.face.b, ih.face.c]) {
+                    const v = new THREE.Vector3().fromBufferAttribute(pos, idx)
+                        .applyMatrix4(ih.object.matrixWorld);
+                    const dd = v.distanceToSquared(ih.point);
+                    if (dd < bestVD) { bestVD = dd; bestV = v; }
+                }
+                if (bestV) {
+                    const s = toScreen(bestV, rect);
+                    const lvl = ih.object.userData.level || {};
+                    const val = lvl.value_mrem_hr != null ? lvl.value_mrem_hr : lvl.value;
+                    const pd = s.behind ? Infinity : Math.hypot(s.x - cursor.x, s.y - cursor.y);
+                    if (pd <= SNAP_TOL) {
+                        isoSnap = { p: bestV, d: pd,
+                            label: 'Isodose' + (val != null ? ' ' + val + ' mrem/hr' : '') };
+                    }
+                }
+            }
         }
 
         hoverGroup = new THREE.Group();
@@ -1225,7 +1366,13 @@ const Scene = (() => {
             if (vis) addFaceHighlight(vis, hit);
         }
 
-        if (best) {
+        // Isodose grid point wins if it is the closest snap under the cursor
+        if (isoSnap && isoSnap.d < (best ? best.d : Infinity)) {
+            const p = isoSnap.p;
+            currentSnap = { x: p.x, y: p.y, z: p.z, type: isoSnap.label };
+            hoverGroup.add(makeGlyph('edge', p));
+            addSnapLabel(isoSnap.label, p);
+        } else if (best) {
             const p = best.f.p;
             currentSnap = { x: p.x, y: p.y, z: p.z, type: best.f.label };
             hoverGroup.add(makeGlyph(best.f.type, p));
@@ -1325,7 +1472,9 @@ const Scene = (() => {
 
     // --- Interaction mode ---
     function setMode(mode) {
-        if (interactionMode === 'measure' && mode !== 'measure') clearMeasure();
+        // Leaving Measure keeps finished measurements on screen; only the
+        // half-placed one is dropped.
+        if (interactionMode === 'measure' && mode !== 'measure') cancelMeasure();
         clearHover();
         interactionMode = mode;
         if (renderer) {
@@ -1357,6 +1506,8 @@ const Scene = (() => {
         setMode,
         getMode,
         clearMeasure,
+        cancelMeasure,
+        deleteLastMeasure,
         getSnap: () => currentSnap,
         COLORS
     };
