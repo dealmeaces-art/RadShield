@@ -990,6 +990,12 @@
                     </div>
                     <div class="ribbon-title">Insert</div>
                 </div>
+                <div class="ribbon-group">
+                    <div class="ribbon-btns">
+                        <button id="homeViewBtn" onclick="Scene.resetView()" title="Home View — snap the camera back to a standard view that shows the whole scene. Use this if navigation leaves you lost."><span class="ico">⌂</span>Home View</button>
+                    </div>
+                    <div class="ribbon-title">View</div>
+                </div>
             </div>
             <div id="results"><h3>Dose Rate Results</h3><div class="result-grid" id="resultGrid"></div></div>
             <div id="helpbar"></div>
@@ -6714,11 +6720,30 @@ const Scene = (() => {
         renderer.setSize(container.clientWidth, container.clientHeight);
     }
 
+    // Home View: snap the camera back to a standard, always-visible pose that
+    // frames the whole scene — a front-elevated 3/4 view looking at the scene
+    // center. Use this to recover if navigation leaves you lost in space.
+    let lastBounds = null;
+    function frameCameraTo(b) {
+        if (!camera || !controls || !b) return;
+        const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2, cz = (b.minZ + b.maxZ) / 2;
+        const maxDim = Math.max(b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ, 20);
+        camera.position.set(cx + maxDim * 0.55, cy + maxDim * 0.95, cz + maxDim * 1.7);
+        controls.target.set(cx, cy, cz);
+        controls.update();
+    }
+    function resetView() {
+        frameCameraTo((lastBounds && isFinite(lastBounds.minX))
+            ? lastBounds
+            : { minX: -40, maxX: 40, minY: 0, maxY: 80, minZ: -40, maxZ: 40 });
+    }
+
     // -----------------------------------------------------------------------
     // Render a scene (array of volume vis-data objects)
     // -----------------------------------------------------------------------
     function renderScene(volumesVisData, bounds, opts) {
         opts = opts || {};
+        if (bounds && isFinite(bounds.minX)) lastBounds = bounds;   // for Home View
         // The gizmo may be attached to a group we are about to destroy
         if (transformControls) transformControls.detach();
 
@@ -6759,18 +6784,9 @@ const Scene = (() => {
             selectedId = null;
         }
 
-        // Frame camera to scene bounds
+        // Frame camera to scene bounds (same canonical pose as Home View)
         if (bounds && opts.frame !== false) {
-            const cx = (bounds.minX + bounds.maxX) / 2;
-            const cy = (bounds.minY + bounds.maxY) / 2;
-            const cz = (bounds.minZ + bounds.maxZ) / 2;
-            const dx = bounds.maxX - bounds.minX;
-            const dy = bounds.maxY - bounds.minY;
-            const dz = bounds.maxZ - bounds.minZ;
-            const maxDim = Math.max(dx, dy, dz, 20);
-            camera.position.set(cx + maxDim * 1.5, cy + maxDim, cz + maxDim * 1.5);
-            controls.target.set(cx, cy, cz);
-            controls.update();
+            frameCameraTo(bounds);
         }
     }
 
@@ -8146,6 +8162,7 @@ const Scene = (() => {
         getSelected,
         setMode,
         getMode,
+        resetView,
         clearMeasure,
         cancelMeasure,
         deleteLastMeasure,
