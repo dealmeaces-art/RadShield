@@ -7906,39 +7906,42 @@ const Scene = (() => {
             ? { x: target.x, y: target.y, z: target.z } : null;
     }
 
-    // Wheel zoom that homes on the cursor: the camera moves toward the point
-    // under the cursor so that point stays put on screen. It does NOT decide the
-    // rotation pivot — that is chosen fresh when you start to rotate (see
-    // recenterPivot), matching CAD navigation where zoom-to-cursor and the
-    // orbit centre are independent.
+    // Wheel zoom that homes on the cursor and NEVER stalls. Each notch dollies
+    // the camera (and target, by the same vector, so orientation is untouched)
+    // along the cursor ray. The step is proportional to the distance to what's
+    // under the cursor — big steps far out, fine steps up close — but floored
+    // at MIN_ZOOM_STEP: if you reach the focus point you simply push through it
+    // and keep flying, you never hit a wall. Rotation pivot is chosen fresh on
+    // drag start (recenterPivot), so zoom and orbit stay independent.
     function onWheelZoom(e) {
         e.preventDefault();
         if (!controls || !camera) return;
         const rc = rayFromEvent(e);
+        const dir = rc.ray.direction.clone().normalize();
 
-        let focus = null;
+        // Distance to the geometry under the cursor (volume, isodose surface,
+        // ground); falls back to the current pivot depth in empty space.
+        let focusDist = null;
         const targets = pickMeshes.slice();
         if (isodoseMeshes && isodoseMeshes.length) targets.push(...isodoseMeshes);
         const hits = targets.length ? rc.intersectObjects(targets, false) : [];
-        if (hits.length) focus = hits[0].point.clone();
-        if (!focus) { const g = pickGroundPoint(rc); if (g) focus = new THREE.Vector3(g.x, g.y, g.z); }
-        if (!focus) {
-            const d = camera.position.distanceTo(controls.target);
-            focus = camera.position.clone().add(rc.ray.direction.clone().normalize().multiplyScalar(d));
+        if (hits.length) focusDist = hits[0].distance;
+        if (focusDist == null) {
+            const g = pickGroundPoint(rc);
+            if (g) focusDist = camera.position.distanceTo(new THREE.Vector3(g.x, g.y, g.z));
         }
+        if (focusDist == null) focusDist = camera.position.distanceTo(controls.target);
 
-        const oldDist = camera.position.distanceTo(controls.target);
-        let scale = e.deltaY < 0 ? 0.85 : (1 / 0.85);   // <1 zoom in, >1 zoom out
-        const nd = oldDist * scale;
-        if (nd < controls.minDistance) scale = controls.minDistance / oldDist;
-        else if (nd > controls.maxDistance) scale = controls.maxDistance / oldDist;
+        const RATE = 0.15;           // fraction of the focus distance per notch
+        const MIN_ZOOM_STEP = 3;     // cm — the push-through floor, never stalls
+        const step = e.deltaY < 0
+            ?  Math.max(focusDist * RATE, MIN_ZOOM_STEP)               // in
+            : -Math.max(focusDist * RATE / (1 - RATE), MIN_ZOOM_STEP); // out (exact inverse)
 
-        // Uniform scale of the camera+target rig about the cursor focus keeps
-        // that focus point fixed on screen (true zoom-to-cursor).
-        const camVec = camera.position.clone().sub(focus).multiplyScalar(scale);
-        const tgtVec = controls.target.clone().sub(focus).multiplyScalar(scale);
-        camera.position.copy(focus).add(camVec);
-        controls.target.copy(focus).add(tgtVec);
+        // Translate camera AND target by the same vector: the point under the
+        // cursor stays pinned on screen and the view direction never changes.
+        camera.position.addScaledVector(dir, step);
+        controls.target.addScaledVector(dir, step);
         controls.update();
     }
 
