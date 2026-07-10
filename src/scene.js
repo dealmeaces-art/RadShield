@@ -537,6 +537,57 @@ const Scene = (() => {
     let clickLabel = null;
     let clickMarker = null;
 
+    // -----------------------------------------------------------------------
+    // Multi-source dedupe (display only — the physics data is untouched).
+    // Every fan's vertices sit on the true total-dose boundary, so when two
+    // sources' lobes merge, both fans trace the SAME surface and the level
+    // was drawn twice: z-fighting shells, doubled wireframes and labels.
+    // Fix: Voronoi ownership — within each level, a fan keeps only the
+    // triangles whose centroid is nearest its own source vantage. Separated
+    // lobes are unaffected (each lobe is nearest its own source); merged
+    // boundaries get split cleanly at the midplane and drawn exactly once.
+    // Points not referenced by a kept triangle are masked so the distance /
+    // level labels stop doubling too. Runs per render; cost is trivial.
+    // -----------------------------------------------------------------------
+    function dedupeIsodoseSurfaces(surfaceData) {
+        const byLevel = new Map();
+        surfaceData.forEach((s, i) => {
+            const key = s.level ? s.level.value_mrem_hr : ('idx' + i);
+            if (!byLevel.has(key)) byLevel.set(key, []);
+            byLevel.get(key).push(i);
+        });
+
+        const out = surfaceData.slice();
+        for (const idxs of byLevel.values()) {
+            if (idxs.length < 2) continue;                      // single fan — nothing to dedupe
+            const cs = idxs.map(i => surfaceData[i].center);
+            if (cs.some(c => !c)) continue;                     // need vantages for ownership
+
+            for (let n = 0; n < idxs.length; n++) {
+                const s = surfaceData[idxs[n]];
+                const kept = [];
+                for (const f of s.faces) {
+                    const pa = s.points[f.a], pb = s.points[f.b], pc = s.points[f.c];
+                    const cx = (pa.x + pb.x + pc.x) / 3;
+                    const cy = (pa.y + pb.y + pc.y) / 3;
+                    const cz = (pa.z + pb.z + pc.z) / 3;
+                    let best = 0, bestD = Infinity;
+                    for (let k = 0; k < cs.length; k++) {
+                        const d = (cx - cs[k].x) ** 2 + (cy - cs[k].y) ** 2 + (cz - cs[k].z) ** 2;
+                        if (d < bestD) { bestD = d; best = k; }
+                    }
+                    if (best === n) kept.push(f);               // this fan owns the triangle
+                }
+                // Mask points no kept triangle references (kills doubled labels)
+                const used = new Set();
+                for (const f of kept) { used.add(f.a); used.add(f.b); used.add(f.c); }
+                const maskedPts = s.points.map((p, pi) => used.has(pi) ? p : null);
+                out[idxs[n]] = { level: s.level, center: s.center, points: maskedPts, faces: kept };
+            }
+        }
+        return out;
+    }
+
     function renderIsodoseSurfaces(surfaceData, centers) {
         clearIsodoseSurfaces();
 
@@ -546,7 +597,9 @@ const Scene = (() => {
             ? centers.slice()
             : [centers || { x: 0, y: 0, z: 0 }];
 
-        for (const surface of surfaceData) {
+        const dedupedData = dedupeIsodoseSurfaces(surfaceData);
+
+        for (const surface of dedupedData) {
             const { level, points, faces } = surface;
             // Distance labels measure from this surface's own source vantage
             const surfCenter = surface.center || isodoseCenters[0];
@@ -1542,6 +1595,7 @@ const Scene = (() => {
         clearHeatmap,
         renderIsodoseSurfaces,
         clearIsodoseSurfaces,
+        dedupeIsodoseSurfaces,
         onResize,
         initEditorControls,
         setSelected,
