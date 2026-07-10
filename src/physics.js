@@ -399,12 +399,174 @@ const Physics = (() => {
     }
 
     // -----------------------------------------------------------------------
+    // Async isodose generation — same physics, same sample positions, same
+    // answers as generateIsodoseSurfaces, with two improvements:
+    //
+    //  1. It yields to the event loop every ~40 ms, so the page stays
+    //     responsive and the progress % actually paints during long runs
+    //     (no more "page not responding" on big scenes).
+    //  2. One outward march per ray brackets ALL levels at once. Along a
+    //     given ray the crossings for descending levels sit at increasing
+    //     distances, and the march samples (minDist × 1.5^k) are identical
+    //     for every level — so re-marching per level (what the sync version
+    //     does) is pure duplicated work. Bisection still runs per level.
+    //
+    // Returns a Promise of the same [{level, center, points, faces}] list,
+    // in the same order (levels sorted high→low, then centers).
+    // -----------------------------------------------------------------------
+    async function generateIsodoseSurfacesAsync(sourceElements, isotopeKey, geometryModel, centers, levels, options, onProgress) {
+        const includeAir = options.includeAir !== undefined ? options.includeAir : true;
+        const subdivisions = options.subdivisions || 3;
+        const minDist = options.minDist || 1;
+        const maxDist = options.maxDist || 2000;
+        const searchSteps = options.searchSteps || 12;
+        const calcOpts = { includeAir: includeAir };
+        const centerList = Array.isArray(centers) ? centers : [centers];
+
+        const ico = createIcosphere(subdivisions);
+        const directions = ico.vertices;
+        const icoFaces = ico.faces;
+        const sortedLevels = levels.slice().sort((a, b) => b.value_mrem_hr - a.value_mrem_hr);
+
+        function doseAtPoint(dosePos) {
+            let total = 0;
+            for (const elem of sourceElements) {
+                const layers = geometryModel.rayTrace(elem.position, dosePos);
+                total += pointSourceDose(elem.activity_Ci, elem.isotopeKey || isotopeKey,
+                    elem.position, dosePos, layers, calcOpts).total_mrem_hr;
+            }
+            return total;
+        }
+        function doseAtDistance(center, dir, dist) {
+            return doseAtPoint({
+                x: center.x + dir.x * dist,
+                y: center.y + dir.y * dist,
+                z: center.z + dir.z * dist
+            });
+        }
+
+        // Cooperative yield: give the browser a paint/input window every ~40 ms
+        const now = (typeof performance !== 'undefined' && performance.now)
+            ? () => performance.now() : () => Date.now();
+        let lastYield = now();
+        async function maybeYield() {
+            if (now() - lastYield > 40) {
+                await new Promise(r => setTimeout(r, 0));
+                lastYield = now();
+            }
+        }
+
+        // points[levelIdx][centerIdx] = per-direction vertex list
+        const points = sortedLevels.map(() => centerList.map(() => []));
+        const totalWork = directions.length * centerList.length;
+        let workDone = 0;
+
+        for (let ci = 0; ci < centerList.length; ci++) {
+            const center = centerList[ci];
+            for (let di = 0; di < directions.length; di++) {
+                const dir = directions[di];
+
+                // Dose at the innermost sample decides which levels are live
+                // on this ray at all (mirrors the sync version's early-out).
+                const s0 = doseAtDistance(center, dir, minDist);
+                let smallestLive = null;
+                for (const lev of sortedLevels) {
+                    if (s0 >= lev.value_mrem_hr) smallestLive = lev.value_mrem_hr;
+                }
+
+                // ONE outward march (identical sample ladder to the sync
+                // version: minDist × 1.5^k), recorded so every level can
+                // find its own first-crossing bracket in it.
+                const samples = [];
+                let reachedMax = false, maxSample = 0;
+                if (smallestLive !== null) {
+                    for (let d = minDist * 1.5; ; d *= 1.5) {
+                        if (d >= maxDist) {
+                            reachedMax = true;
+                            maxSample = doseAtDistance(center, dir, maxDist);
+                            break;
+                        }
+                        const s = doseAtDistance(center, dir, d);
+                        samples.push({ d: d, dose: s });
+                        if (s < smallestLive) break;   // every live level has bracketed
+                    }
+                }
+
+                for (let li = 0; li < sortedLevels.length; li++) {
+                    const L = sortedLevels[li].value_mrem_hr;
+                    if (s0 < L) { points[li][ci].push(null); continue; }
+
+                    // First crossing = first march sample below the level
+                    let k = -1;
+                    for (let i = 0; i < samples.length; i++) {
+                        if (samples[i].dose < L) { k = i; break; }
+                    }
+
+                    let lo, hi;
+                    if (k === 0) { lo = minDist; hi = samples[0].d; }
+                    else if (k > 0) { lo = samples[k - 1].d; hi = samples[k].d; }
+                    else if (reachedMax) {
+                        if (maxSample > L) {   // surface beyond search range — clamp
+                            points[li][ci].push({
+                                x: center.x + dir.x * maxDist,
+                                y: center.y + dir.y * maxDist,
+                                z: center.z + dir.z * maxDist
+                            });
+                            continue;
+                        }
+                        lo = samples.length ? samples[samples.length - 1].d : minDist;
+                        hi = maxDist;
+                    } else {
+                        points[li][ci].push(null);   // unreachable; defensive
+                        continue;
+                    }
+
+                    for (let step = 0; step < searchSteps; step++) {
+                        const mid = (lo + hi) / 2;
+                        if (doseAtDistance(center, dir, mid) > L) lo = mid;
+                        else hi = mid;
+                    }
+                    const dist = (lo + hi) / 2;
+                    points[li][ci].push({
+                        x: center.x + dir.x * dist,
+                        y: center.y + dir.y * dist,
+                        z: center.z + dir.z * dist
+                    });
+                }
+
+                workDone++;
+                if (onProgress && workDone % 5 === 0) onProgress(workDone / totalWork);
+                await maybeYield();
+            }
+        }
+
+        // Assemble in the sync version's order: level outer, center inner
+        const results = [];
+        for (let li = 0; li < sortedLevels.length; li++) {
+            for (let ci = 0; ci < centerList.length; ci++) {
+                const pts = points[li][ci];
+                const faces = [];
+                for (const f of icoFaces) {
+                    if (pts[f.a] && pts[f.b] && pts[f.c]) {
+                        faces.push({ a: f.a, b: f.b, c: f.c });
+                    }
+                }
+                results.push({ level: sortedLevels[li], center: centerList[ci], points: pts, faces });
+            }
+        }
+
+        if (onProgress) onProgress(1);
+        return results;
+    }
+
+    // -----------------------------------------------------------------------
     // Public API
     // -----------------------------------------------------------------------
     return {
         pointSourceDose,
         volumetricSourceDose,
         generateIsodoseSurfaces,
+        generateIsodoseSurfacesAsync,
         quickDose_R_hr,
         formatDose,
         formatDoseSv,

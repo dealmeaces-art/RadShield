@@ -196,7 +196,51 @@ const opts = { includeAir: true, subdivisions: 2, minDist: 1, maxDist: 2000, sea
         `correct=${combined.total_mrem_hr.toFixed(2)}, old=${buggy.toFixed(2)}`);
 }
 
-console.log(failures === 0
-    ? '\nAll isodose checks passed.'
-    : `\n${failures} isodose checks FAILED.`);
-process.exit(failures === 0 ? 0 : 1);
+// ---------------------------------------------------------------------------
+// 5. Async generator (shared-march, page-responsive) must produce EXACTLY the
+//    same surfaces as the sync one: identical sample ladder + bisection ⇒
+//    identical vertices, nulls, and faces, in the same order.
+// ---------------------------------------------------------------------------
+(async () => {
+    const levels = [
+        { value_mrem_hr: 200, color: '#f00', label: '200' },
+        { value_mrem_hr: 25,  color: '#ff0', label: '25' },
+        { value_mrem_hr: 5,   color: '#0f0', label: '5' }
+    ];
+    const opts = { includeAir: true, subdivisions: 2, minDist: 1, maxDist: 600, searchSteps: 12 };
+
+    const syncRes = Physics.generateIsodoseSurfaces(
+        elements, 'Co-60', model, centers, levels, opts);
+    const asyncRes = await Physics.generateIsodoseSurfacesAsync(
+        elements, 'Co-60', model, centers, levels, opts);
+
+    check('async: same number of surfaces', asyncRes.length === syncRes.length,
+        `sync=${syncRes.length} async=${asyncRes.length}`);
+
+    let worstDelta = 0, nullMismatch = 0, faceMismatch = 0, comparedPts = 0;
+    for (let i = 0; i < Math.min(syncRes.length, asyncRes.length); i++) {
+        const s = syncRes[i], a = asyncRes[i];
+        if (s.faces.length !== a.faces.length) faceMismatch++;
+        for (let p = 0; p < s.points.length; p++) {
+            const sp = s.points[p], ap = a.points[p];
+            if (!sp !== !ap) { nullMismatch++; continue; }
+            if (!sp) continue;
+            comparedPts++;
+            worstDelta = Math.max(worstDelta,
+                Math.abs(sp.x - ap.x), Math.abs(sp.y - ap.y), Math.abs(sp.z - ap.z));
+        }
+    }
+    check('async: null/point pattern identical', nullMismatch === 0,
+        `${nullMismatch} mismatches`);
+    check('async: face counts identical', faceMismatch === 0,
+        `${faceMismatch} surfaces differ`);
+    check('async: vertices bit-identical (< 1e-9 cm)', worstDelta < 1e-9,
+        `worst delta = ${worstDelta} over ${comparedPts} pts`);
+    check('async: compared a real number of points', comparedPts > 200,
+        `only ${comparedPts}`);
+
+    console.log(failures === 0
+        ? '\nAll isodose checks passed.'
+        : `\n${failures} isodose checks FAILED.`);
+    process.exit(failures === 0 ? 0 : 1);
+})();

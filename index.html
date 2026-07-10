@@ -1546,14 +1546,13 @@
             });
         }
 
-        function generateIsodose() {
+        async function generateIsodose() {
             const btn = document.getElementById('isodoseBtn');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span> Generating... 0%';
             setStatus('Generating isodose surfaces...');
 
-            // Use setTimeout to let UI update
-            setTimeout(() => {
+            {
                 try {
                     const model = Editor.getModel();
                     const isotopeKey = model.getSourceIsotope();
@@ -1603,8 +1602,10 @@
 
                     const t0 = performance.now();
 
-                    // Run generation with progress callback
-                    const surfaces = Physics.generateIsodoseSurfaces(
+                    // Async generation: yields to the browser so the page stays
+                    // responsive and the progress % actually paints; one march
+                    // per ray brackets every level at once (same physics).
+                    const surfaces = await Physics.generateIsodoseSurfacesAsync(
                         elements, isotopeKey, model, centers, levels,
                         {
                             includeAir: includeAir,
@@ -1635,7 +1636,7 @@
                     btn.disabled = false;
                     btn.textContent = 'Generate Isodose Surfaces';
                 }
-            }, 50);
+            }
         }
 
         // ===================================================================
@@ -2016,29 +2017,39 @@
 
             const frames = [];
             let k = 0;
-            function buildStep() {
+            async function buildStep() {
                 if (k >= nFrames) { finishBuild(); return; }
-                const stepIdx = Math.round(k * nSteps / (nFrames - 1));
-                const act = simResults.activities[stepIdx];
-                sources.forEach(v => { if (act[v.id] !== undefined) v.activity_Ci = act[v.id]; });
-                if (puddle && simResults.spillRadius_cm) puddle.radius = Math.max(1, simResults.spillRadius_cm[stepIdx]);
+                try {
+                    const stepIdx = Math.round(k * nSteps / (nFrames - 1));
+                    const act = simResults.activities[stepIdx];
+                    sources.forEach(v => { if (act[v.id] !== undefined) v.activity_Ci = act[v.id]; });
+                    if (puddle && simResults.spillRadius_cm) puddle.radius = Math.max(1, simResults.spillRadius_cm[stepIdx]);
 
-                const elements = [], centers = [];
-                for (const v of model.volumes) {
-                    if (v.enabled === false || v.role !== 'source') continue;
-                    const els = v.meshSource(5, 16, 8); if (!els.length) continue;
-                    let cx = 0, cy = 0, cz = 0;
-                    for (const e of els) { cx += e.position.x; cy += e.position.y; cz += e.position.z; }
-                    centers.push({ x: cx / els.length, y: cy / els.length, z: cz / els.length });
-                    elements.push(...els);
+                    const elements = [], centers = [];
+                    for (const v of model.volumes) {
+                        if (v.enabled === false || v.role !== 'source') continue;
+                        const els = v.meshSource(5, 16, 8); if (!els.length) continue;
+                        let cx = 0, cy = 0, cz = 0;
+                        for (const e of els) { cx += e.position.x; cy += e.position.y; cz += e.position.z; }
+                        centers.push({ x: cx / els.length, y: cy / els.length, z: cz / els.length });
+                        elements.push(...els);
+                    }
+                    let surfaces = [];
+                    if (centers.length) {
+                        surfaces = await Physics.generateIsodoseSurfacesAsync(
+                            elements, model.getSourceIsotope(), model, centers, levels,
+                            { includeAir: includeAir, subdivisions: subdiv, minDist: 1, maxDist: maxRange, searchSteps: 12 });
+                    }
+                    frames.push({ stepIdx: stepIdx, tMin: simResults.times_min[stepIdx], surfaces: surfaces, centers: centers, act: act });
+                } catch (e) {
+                    // Restore the model and UI, then bail out of the build
+                    sources.forEach(v => v.activity_Ci = savedA[v.id]);
+                    if (puddle && savedR != null) puddle.radius = savedR;
+                    btn.disabled = false; btn.textContent = 'Build field animation';
+                    setStatus('Field animation failed: ' + e.message);
+                    console.error(e);
+                    return;
                 }
-                let surfaces = [];
-                if (centers.length) {
-                    surfaces = Physics.generateIsodoseSurfaces(
-                        elements, model.getSourceIsotope(), model, centers, levels,
-                        { includeAir: includeAir, subdivisions: subdiv, minDist: 1, maxDist: maxRange, searchSteps: 12 });
-                }
-                frames.push({ stepIdx: stepIdx, tMin: simResults.times_min[stepIdx], surfaces: surfaces, centers: centers, act: act });
                 k++;
                 btn.textContent = 'Building… ' + Math.round(k / nFrames * 100) + '%';
                 setStatus('Building field animation… frame ' + k + ' / ' + nFrames);
