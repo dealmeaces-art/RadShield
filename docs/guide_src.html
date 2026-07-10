@@ -677,8 +677,9 @@ as a translucent 3D shell around your sources, with distances labeled.</p>
 <ol>
     <li>In the <b>Isodose Surfaces</b> panel, define one or more levels with <span class="ui">+ Add Level</span> —
         a dose rate in mrem/hr and a display color each (e.g. 100 red, 25 amber, 5 green).</li>
-    <li>Pick a <b>Resolution</b>. More rays per source = smoother shells, longer runtime. Start with Low, rerun
-        at Medium/High when the picture is right.</li>
+    <li>Pick a <b>Resolution</b> — Low (162 rays/source), Mid (362), Medium (642) or High (2562). More rays =
+        smoother shells, longer runtime. Start with Low to frame the problem, then rerun at Mid or above when
+        the picture is right; Mid is the everyday default.</li>
     <li>Set <b>Max Range</b> larger than the farthest boundary you expect (rays stop searching there).</li>
     <li>Press <span class="ui">Generate Isodose Surfaces</span> and watch the progress percentage.
         Runtime scales with rays × levels × sources.</li>

@@ -822,9 +822,10 @@
                     <div class="form-row" title="Number of search rays cast from each source. Higher = smoother surfaces, slower. Time scales with the number of sources and levels.">
                         <label>Resolution</label>
                         <select id="isodoseRes">
-                            <option value="2">Low - 162 rays/source (~5s)</option>
-                            <option value="3" selected>Medium - 642 rays/source (~20s)</option>
-                            <option value="4">High - 2562 rays/source (~60s)</option>
+                            <option value="4">Low - 162 rays/source</option>
+                            <option value="6" selected>Mid - 362 rays/source</option>
+                            <option value="8">Medium - 642 rays/source</option>
+                            <option value="16">High - 2562 rays/source</option>
                         </select>
                     </div>
                     <div class="form-row" title="Rays stop searching past this distance from each source — set it larger than your lowest dose boundary">
@@ -1587,8 +1588,8 @@
                         return;
                     }
 
-                    // Resolution = icosphere subdivision level
-                    const subdivisions = parseInt(document.getElementById('isodoseRes').value) || 3;
+                    // Resolution = geodesic frequency (rays = 10·freq²+2)
+                    const frequency = parseInt(document.getElementById('isodoseRes').value) || 6;
                     const maxRange = parseFloat(document.getElementById('isodoseRange').value) * IN;
 
                     // Build levels
@@ -1609,7 +1610,7 @@
                         elements, isotopeKey, model, centers, levels,
                         {
                             includeAir: includeAir,
-                            subdivisions: subdivisions,
+                            frequency: frequency,
                             minDist: 1,
                             maxDist: maxRange,
                             searchSteps: 12
@@ -1996,7 +1997,7 @@
             }
             const model = Editor.getModel();
             const IN = Geometry.INCH_TO_CM;
-            const subdiv = parseInt(document.getElementById('isodoseRes').value) || 2;
+            const frequency = parseInt(document.getElementById('isodoseRes').value) || 6;
             const maxRange = parseFloat(document.getElementById('isodoseRange').value) * IN;
             const includeAir = document.getElementById('includeAir').checked;
             const levels = isodoseLevelData.map(l => ({
@@ -2038,7 +2039,7 @@
                     if (centers.length) {
                         surfaces = await Physics.generateIsodoseSurfacesAsync(
                             elements, model.getSourceIsotope(), model, centers, levels,
-                            { includeAir: includeAir, subdivisions: subdiv, minDist: 1, maxDist: maxRange, searchSteps: 12 });
+                            { includeAir: includeAir, frequency: frequency, minDist: 1, maxDist: maxRange, searchSteps: 12 });
                     }
                     frames.push({ stepIdx: stepIdx, tMin: simResults.times_min[stepIdx], surfaces: surfaces, centers: centers, act: act });
                 } catch (e) {

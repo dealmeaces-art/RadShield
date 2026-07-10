@@ -193,64 +193,68 @@ const Physics = (() => {
     }
 
     // -----------------------------------------------------------------------
-    // Icosphere generator for uniform spherical sampling
-    // Starts with an icosahedron and subdivides faces for even distribution.
+    // Geodesic icosphere generator for uniform spherical sampling.
+    // Each icosahedron face is split into freq² triangles (barycentric grid,
+    // projected to the unit sphere), giving 10·freq²+2 vertices. Unlike the
+    // old recursive midpoint subdivision (which could only do 42/162/642/2562
+    // = freq 2/4/8/16), any even spacing is available — freq 6 = 362 rays
+    // sits between Low (162) and Medium (642).
     // Returns { vertices: [{x,y,z}], faces: [{a,b,c}] }
     // -----------------------------------------------------------------------
-    function createIcosphere(subdivisions) {
-        // Golden ratio
+    function createIcosphere(freq) {
+        freq = Math.max(1, Math.round(freq));
         const t = (1 + Math.sqrt(5)) / 2;
-
-        // Icosahedron base vertices (normalized to unit sphere)
-        let vertices = [
+        const base = [
             {x:-1,y: t,z: 0},{x: 1,y: t,z: 0},{x:-1,y:-t,z: 0},{x: 1,y:-t,z: 0},
             {x: 0,y:-1,z: t},{x: 0,y: 1,z: t},{x: 0,y:-1,z:-t},{x: 0,y: 1,z:-t},
             {x: t,y: 0,z:-1},{x: t,y: 0,z: 1},{x:-t,y: 0,z:-1},{x:-t,y: 0,z: 1}
-        ];
-        // Normalize
-        vertices = vertices.map(v => {
+        ].map(v => {
             const len = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
             return { x: v.x/len, y: v.y/len, z: v.z/len };
         });
-
-        // Icosahedron faces
-        let faces = [
+        const baseFaces = [
             {a:0,b:11,c:5},{a:0,b:5,c:1},{a:0,b:1,c:7},{a:0,b:7,c:10},{a:0,b:10,c:11},
             {a:1,b:5,c:9},{a:5,b:11,c:4},{a:11,b:10,c:2},{a:10,b:7,c:6},{a:7,b:1,c:8},
             {a:3,b:9,c:4},{a:3,b:4,c:2},{a:3,b:2,c:6},{a:3,b:6,c:8},{a:3,b:8,c:9},
             {a:4,b:9,c:5},{a:2,b:4,c:11},{a:6,b:2,c:10},{a:8,b:6,c:7},{a:9,b:8,c:1}
         ];
 
-        // Subdivide
-        const midpointCache = {};
-        function getMidpoint(i1, i2) {
-            const key = Math.min(i1,i2) + '_' + Math.max(i1,i2);
-            if (midpointCache[key] !== undefined) return midpointCache[key];
-            const v1 = vertices[i1], v2 = vertices[i2];
-            const mx = (v1.x+v2.x)/2, my = (v1.y+v2.y)/2, mz = (v1.z+v2.z)/2;
-            const len = Math.sqrt(mx*mx+my*my+mz*mz);
-            vertices.push({ x:mx/len, y:my/len, z:mz/len });
-            const idx = vertices.length - 1;
-            midpointCache[key] = idx;
-            return idx;
+        const vertices = [];
+        const vmap = new Map();   // dedupe shared edge/corner vertices
+        function addVert(x, y, z) {
+            const len = Math.sqrt(x*x + y*y + z*z);
+            x /= len; y /= len; z /= len;
+            const key = Math.round(x*1e6) + ',' + Math.round(y*1e6) + ',' + Math.round(z*1e6);
+            if (vmap.has(key)) return vmap.get(key);
+            vertices.push({ x, y, z });
+            vmap.set(key, vertices.length - 1);
+            return vertices.length - 1;
         }
 
-        for (let s = 0; s < subdivisions; s++) {
-            const newFaces = [];
-            for (const f of faces) {
-                const ab = getMidpoint(f.a, f.b);
-                const bc = getMidpoint(f.b, f.c);
-                const ca = getMidpoint(f.c, f.a);
-                newFaces.push(
-                    {a:f.a, b:ab, c:ca},
-                    {a:f.b, b:bc, c:ab},
-                    {a:f.c, b:ca, c:bc},
-                    {a:ab, b:bc, c:ca}
-                );
+        const faces = [];
+        for (const f of baseFaces) {
+            const A = base[f.a], B = base[f.b], C = base[f.c];
+            // Barycentric grid: idx[i][j] with i along A→B, j along A→C
+            const idx = [];
+            for (let i = 0; i <= freq; i++) {
+                idx.push([]);
+                for (let j = 0; j <= freq - i; j++) {
+                    const u = i / freq, v = j / freq;
+                    idx[i].push(addVert(
+                        A.x + (B.x - A.x) * u + (C.x - A.x) * v,
+                        A.y + (B.y - A.y) * u + (C.y - A.y) * v,
+                        A.z + (B.z - A.z) * u + (C.z - A.z) * v
+                    ));
+                }
             }
-            faces = newFaces;
-            // Clear cache for next subdivision level
-            for (const key in midpointCache) delete midpointCache[key];
+            for (let i = 0; i < freq; i++) {
+                for (let j = 0; j < freq - i; j++) {
+                    faces.push({ a: idx[i][j], b: idx[i + 1][j], c: idx[i][j + 1] });
+                    if (j < freq - i - 1) {
+                        faces.push({ a: idx[i + 1][j], b: idx[i + 1][j + 1], c: idx[i][j + 1] });
+                    }
+                }
+            }
         }
 
         return { vertices, faces };
@@ -284,7 +288,9 @@ const Physics = (() => {
     // -----------------------------------------------------------------------
     function generateIsodoseSurfaces(sourceElements, isotopeKey, geometryModel, centers, levels, options, onProgress) {
         const includeAir = options.includeAir !== undefined ? options.includeAir : true;
-        const subdivisions = options.subdivisions || 3;
+        // frequency = geodesic density (rays = 10·freq²+2); legacy subdivisions
+        // map to freq 2^n so old callers keep their ray counts
+        const frequency = options.frequency || Math.pow(2, options.subdivisions || 3);
         const minDist = options.minDist || 1;
         const maxDist = options.maxDist || 2000;
         const searchSteps = options.searchSteps || 12;
@@ -292,7 +298,7 @@ const Physics = (() => {
         const centerList = Array.isArray(centers) ? centers : [centers];
 
         // Generate icosphere for uniform ray directions + triangulation
-        const ico = createIcosphere(subdivisions);
+        const ico = createIcosphere(frequency);
         const directions = ico.vertices;  // unit vectors
         const icoFaces = ico.faces;       // triangulation
 
@@ -416,33 +422,46 @@ const Physics = (() => {
     // -----------------------------------------------------------------------
     async function generateIsodoseSurfacesAsync(sourceElements, isotopeKey, geometryModel, centers, levels, options, onProgress) {
         const includeAir = options.includeAir !== undefined ? options.includeAir : true;
-        const subdivisions = options.subdivisions || 3;
+        const frequency = options.frequency || Math.pow(2, options.subdivisions || 3);
         const minDist = options.minDist || 1;
         const maxDist = options.maxDist || 2000;
         const searchSteps = options.searchSteps || 12;
         const calcOpts = { includeAir: includeAir };
         const centerList = Array.isArray(centers) ? centers : [centers];
 
-        const ico = createIcosphere(subdivisions);
+        const ico = createIcosphere(frequency);
         const directions = ico.vertices;
         const icoFaces = ico.faces;
         const sortedLevels = levels.slice().sort((a, b) => b.value_mrem_hr - a.value_mrem_hr);
 
-        function doseAtPoint(dosePos) {
+        // Bounding-sphere acceleration for the ray-tracer: volumes a segment
+        // provably cannot touch are skipped. Purely a rejection test — the
+        // layers that come back are identical (regression-checked against the
+        // sync reference, which does not use it).
+        const rayAccel = geometryModel.buildRayAccel ? geometryModel.buildRayAccel() : null;
+
+        // Every decision this algorithm makes is "is dose above/below a level?"
+        // — never the value itself. Dose is a sum of nonnegative element
+        // kernels, so once the running sum passes `breakAbove` the comparison
+        // outcome is locked and the remaining elements can be skipped. Same
+        // summation order, so every decision (and thus every vertex) is
+        // bit-identical to the exhaustive sum.
+        function doseAtPoint(dosePos, breakAbove) {
             let total = 0;
             for (const elem of sourceElements) {
-                const layers = geometryModel.rayTrace(elem.position, dosePos);
+                const layers = geometryModel.rayTrace(elem.position, dosePos, rayAccel);
                 total += pointSourceDose(elem.activity_Ci, elem.isotopeKey || isotopeKey,
                     elem.position, dosePos, layers, calcOpts).total_mrem_hr;
+                if (breakAbove !== undefined && total > breakAbove) return total;
             }
             return total;
         }
-        function doseAtDistance(center, dir, dist) {
+        function doseAtDistance(center, dir, dist, breakAbove) {
             return doseAtPoint({
                 x: center.x + dir.x * dist,
                 y: center.y + dir.y * dist,
                 z: center.z + dir.z * dist
-            });
+            }, breakAbove);
         }
 
         // Cooperative yield: give the browser a paint/input window every ~40 ms
@@ -461,6 +480,11 @@ const Physics = (() => {
         const totalWork = directions.length * centerList.length;
         let workDone = 0;
 
+        // March samples are compared against EVERY level, so their early-exit
+        // ceiling must be the highest level: a partial sum that exceeds it
+        // answers "above" for all levels; anything else is summed exactly.
+        const levelMax = sortedLevels.length ? sortedLevels[0].value_mrem_hr : undefined;
+
         for (let ci = 0; ci < centerList.length; ci++) {
             const center = centerList[ci];
             for (let di = 0; di < directions.length; di++) {
@@ -468,7 +492,7 @@ const Physics = (() => {
 
                 // Dose at the innermost sample decides which levels are live
                 // on this ray at all (mirrors the sync version's early-out).
-                const s0 = doseAtDistance(center, dir, minDist);
+                const s0 = doseAtDistance(center, dir, minDist, levelMax);
                 let smallestLive = null;
                 for (const lev of sortedLevels) {
                     if (s0 >= lev.value_mrem_hr) smallestLive = lev.value_mrem_hr;
@@ -483,10 +507,10 @@ const Physics = (() => {
                     for (let d = minDist * 1.5; ; d *= 1.5) {
                         if (d >= maxDist) {
                             reachedMax = true;
-                            maxSample = doseAtDistance(center, dir, maxDist);
+                            maxSample = doseAtDistance(center, dir, maxDist, levelMax);
                             break;
                         }
-                        const s = doseAtDistance(center, dir, d);
+                        const s = doseAtDistance(center, dir, d, levelMax);
                         samples.push({ d: d, dose: s });
                         if (s < smallestLive) break;   // every live level has bracketed
                     }
@@ -523,7 +547,8 @@ const Physics = (() => {
 
                     for (let step = 0; step < searchSteps; step++) {
                         const mid = (lo + hi) / 2;
-                        if (doseAtDistance(center, dir, mid) > L) lo = mid;
+                        // Bisection only compares against THIS level
+                        if (doseAtDistance(center, dir, mid, L) > L) lo = mid;
                         else hi = mid;
                     }
                     const dist = (lo + hi) / 2;

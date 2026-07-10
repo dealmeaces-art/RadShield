@@ -331,6 +331,66 @@ function layerOf(layers, mat) {
     check('box/sphere round-trip: identical ray-traces', same);
 }
 
+// ---------------------------------------------------------------------------
+// Bounding-sphere ray-trace acceleration: rayTrace(a, b, accel) must return
+// EXACTLY the same layers as rayTrace(a, b) for any segment — the accel is a
+// pure rejection test. Exercised on a busy scene with every volume type,
+// rotations, and a spread of random segments (many missing most volumes).
+// ---------------------------------------------------------------------------
+{
+    const m = new Geometry.SceneModel();
+    m.addVolume(new Geometry.CylinderVolume({
+        id: 'c1', materialKey: 'water', position: { x: 0, y: 0, z: 0 },
+        dimensions: { radius: 20, height: 60 }, priority: 10
+    }));
+    m.addVolume(new Geometry.AnnulusVolume({
+        id: 'a1', materialKey: 'steel', position: { x: 0, y: 0, z: 0 },
+        dimensions: { innerRadius: 20, outerRadius: 23, height: 60 }, priority: 50
+    }));
+    m.addVolume(new Geometry.BoxVolume({
+        id: 'b1', materialKey: 'lead', position: { x: 120, y: 10, z: -40 },
+        rotation: { x: 0, y: 35, z: 10 },
+        dimensions: { width: 30, depth: 8, height: 50 }, priority: 20
+    }));
+    m.addVolume(new Geometry.SphereVolume({
+        id: 's1', materialKey: 'concrete', position: { x: -150, y: 0, z: 90 },
+        dimensions: { radius: 35 }, priority: 20
+    }));
+    m.addVolume(new Geometry.DiskVolume({
+        id: 'd1', materialKey: 'lead', position: { x: 60, y: 80, z: 60 },
+        rotation: { x: 20, y: 0, z: 45 },
+        dimensions: { radius: 25, thickness: 3 }, priority: 30
+    }));
+    m.addVolume(new Geometry.BoxVolume({
+        id: 'off', materialKey: 'concrete', position: { x: 0, y: 0, z: 900 },
+        dimensions: { width: 100, depth: 20, height: 100 }, priority: 20,
+        enabled: false   // disabled volumes must stay excluded either way
+    }));
+
+    const accel = m.buildRayAccel();
+    check('accel excludes disabled volumes', accel.length === 5,
+        `got ${accel.length}`);
+
+    // Deterministic pseudo-random segments spanning the scene and far past it
+    let seed = 12345;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    let mismatches = 0, tested = 0, totalLayersAccel = 0, totalLayersPlain = 0;
+    for (let i = 0; i < 400; i++) {
+        const a = { x: (rnd() - 0.5) * 800, y: (rnd() - 0.5) * 400, z: (rnd() - 0.5) * 800 };
+        const b = { x: (rnd() - 0.5) * 800, y: (rnd() - 0.5) * 400, z: (rnd() - 0.5) * 800 };
+        const plain = m.rayTrace(a, b);
+        const fast = m.rayTrace(a, b, accel);
+        totalLayersPlain += plain.length;
+        totalLayersAccel += fast.length;
+        if (JSON.stringify(plain) !== JSON.stringify(fast)) mismatches++;
+        tested++;
+    }
+    check('accel: 400 random segments give identical layers', mismatches === 0,
+        `${mismatches}/${tested} differ`);
+    check('accel: traces actually hit material (non-trivial test)',
+        totalLayersPlain > 400, `total layers = ${totalLayersPlain}`);
+}
+
 console.log(failures === 0
     ? '\nAll geometry checks passed.'
     : `\n${failures} geometry checks FAILED.`);

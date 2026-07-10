@@ -620,10 +620,49 @@ const Geometry = (() => {
         }
 
         // ---------------------------------------------------------------
-        // Ray-trace from source point to dose point
-        // Returns [{materialKey, thickness_cm}] ordered along the ray
+        // Bounding-sphere acceleration for rayTrace. One entry per enabled
+        // volume: a conservative world-space sphere the volume is fully
+        // inside. A segment that misses the sphere can neither intersect
+        // the volume nor have any point inside it, so both the intersect
+        // loop and the material sampling may skip it — the layers returned
+        // are identical, just computed faster. Build once per batch of
+        // traces (the caller owns freshness: rebuild after geometry edits).
         // ---------------------------------------------------------------
-        rayTrace(fromPos, toPos) {
+        buildRayAccel() {
+            const accel = [];
+            for (const vol of this.volumes) {
+                if (vol.enabled === false) continue;
+                const dims = vol._dims();
+                const type = vol._type();
+                let cy, r2;
+                if (type === 'sphere') {
+                    cy = dims.radius;
+                    r2 = dims.radius * dims.radius;
+                } else if (type === 'box') {
+                    cy = dims.height / 2;
+                    r2 = (dims.width * dims.width + dims.height * dims.height +
+                          dims.depth * dims.depth) / 4;
+                } else {
+                    // cylinder / disk / annulus: radius × half-height envelope
+                    const r = dims.radius || dims.outerRadius || 0;
+                    const h = dims.height || dims.thickness || 0;
+                    cy = h / 2;
+                    r2 = r * r + (h / 2) * (h / 2);
+                }
+                const c = vol.localToWorld(0, cy, 0);
+                // small conservative margin against float error
+                accel.push({ vol: vol, cx: c.x, cy: c.y, cz: c.z, r2: r2 * 1.000002 + 1e-9 });
+            }
+            return accel;
+        }
+
+        // ---------------------------------------------------------------
+        // Ray-trace from source point to dose point
+        // Returns [{materialKey, thickness_cm}] ordered along the ray.
+        // Optional accel (from buildRayAccel) skips volumes the segment
+        // provably cannot touch — result is unchanged.
+        // ---------------------------------------------------------------
+        rayTrace(fromPos, toPos, accel) {
             const dx = toPos.x - fromPos.x;
             const dy = toPos.y - fromPos.y;
             const dz = toPos.z - fromPos.z;
@@ -634,12 +673,27 @@ const Geometry = (() => {
             const ny = dy / rayLen;
             const nz = dz / rayLen;
 
-            // Collect all intersection t-values from every volume
+            // Candidate volumes: those whose bounding sphere the segment touches
+            let candidates = null;
+            if (accel) {
+                candidates = [];
+                for (const a of accel) {
+                    // squared distance from sphere center to segment [from,to]
+                    const px = a.cx - fromPos.x, py = a.cy - fromPos.y, pz = a.cz - fromPos.z;
+                    let t = (px * dx + py * dy + pz * dz) / (rayLen * rayLen);
+                    if (t < 0) t = 0; else if (t > 1) t = 1;
+                    const ex = px - t * dx, ey = py - t * dy, ez = pz - t * dz;
+                    if (ex * ex + ey * ey + ez * ez <= a.r2) candidates.push(a.vol);
+                }
+            }
+            const vols = candidates || this.volumes;
+
+            // Collect all intersection t-values from every candidate volume
             const allT = new Set();
             allT.add(0);
             allT.add(rayLen);
 
-            for (const vol of this.volumes) {
+            for (const vol of vols) {
                 if (vol.enabled === false) continue;
                 const hits = vol.rayIntersect(fromPos.x, fromPos.y, fromPos.z, nx, ny, nz);
                 for (const t of hits) {
@@ -652,7 +706,9 @@ const Geometry = (() => {
             // Sort intersection parameters
             const boundaries = Array.from(allT).sort((a, b) => a - b);
 
-            // Walk segments, sample midpoint to determine material
+            // Walk segments, sample midpoint to determine material. Only the
+            // candidate volumes can contain a point ON the segment, so the
+            // material lookup may use the same reduced list.
             const layers = [];
             for (let i = 0; i < boundaries.length - 1; i++) {
                 const t0 = boundaries[i];
@@ -665,7 +721,19 @@ const Geometry = (() => {
                 const py = fromPos.y + tMid * ny;
                 const pz = fromPos.z + tMid * nz;
 
-                const mat = this.getMaterialAt(px, py, pz);
+                let mat;
+                if (candidates) {
+                    mat = 'air';
+                    let bestPriority = -1;
+                    for (const vol of candidates) {
+                        if (vol.priority > bestPriority && vol.containsPoint(px, py, pz)) {
+                            mat = vol.materialKey;
+                            bestPriority = vol.priority;
+                        }
+                    }
+                } else {
+                    mat = this.getMaterialAt(px, py, pz);
+                }
 
                 if (layers.length > 0 && layers[layers.length - 1].materialKey === mat) {
                     layers[layers.length - 1].thickness_cm += thickness;

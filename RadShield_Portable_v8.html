@@ -822,9 +822,10 @@
                     <div class="form-row" title="Number of search rays cast from each source. Higher = smoother surfaces, slower. Time scales with the number of sources and levels.">
                         <label>Resolution</label>
                         <select id="isodoseRes">
-                            <option value="2">Low - 162 rays/source (~5s)</option>
-                            <option value="3" selected>Medium - 642 rays/source (~20s)</option>
-                            <option value="4">High - 2562 rays/source (~60s)</option>
+                            <option value="4">Low - 162 rays/source</option>
+                            <option value="6" selected>Mid - 362 rays/source</option>
+                            <option value="8">Medium - 642 rays/source</option>
+                            <option value="16">High - 2562 rays/source</option>
                         </select>
                     </div>
                     <div class="form-row" title="Rays stop searching past this distance from each source — set it larger than your lowest dose boundary">
@@ -5178,64 +5179,68 @@ const Physics = (() => {
     }
 
     // -----------------------------------------------------------------------
-    // Icosphere generator for uniform spherical sampling
-    // Starts with an icosahedron and subdivides faces for even distribution.
+    // Geodesic icosphere generator for uniform spherical sampling.
+    // Each icosahedron face is split into freq² triangles (barycentric grid,
+    // projected to the unit sphere), giving 10·freq²+2 vertices. Unlike the
+    // old recursive midpoint subdivision (which could only do 42/162/642/2562
+    // = freq 2/4/8/16), any even spacing is available — freq 6 = 362 rays
+    // sits between Low (162) and Medium (642).
     // Returns { vertices: [{x,y,z}], faces: [{a,b,c}] }
     // -----------------------------------------------------------------------
-    function createIcosphere(subdivisions) {
-        // Golden ratio
+    function createIcosphere(freq) {
+        freq = Math.max(1, Math.round(freq));
         const t = (1 + Math.sqrt(5)) / 2;
-
-        // Icosahedron base vertices (normalized to unit sphere)
-        let vertices = [
+        const base = [
             {x:-1,y: t,z: 0},{x: 1,y: t,z: 0},{x:-1,y:-t,z: 0},{x: 1,y:-t,z: 0},
             {x: 0,y:-1,z: t},{x: 0,y: 1,z: t},{x: 0,y:-1,z:-t},{x: 0,y: 1,z:-t},
             {x: t,y: 0,z:-1},{x: t,y: 0,z: 1},{x:-t,y: 0,z:-1},{x:-t,y: 0,z: 1}
-        ];
-        // Normalize
-        vertices = vertices.map(v => {
+        ].map(v => {
             const len = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
             return { x: v.x/len, y: v.y/len, z: v.z/len };
         });
-
-        // Icosahedron faces
-        let faces = [
+        const baseFaces = [
             {a:0,b:11,c:5},{a:0,b:5,c:1},{a:0,b:1,c:7},{a:0,b:7,c:10},{a:0,b:10,c:11},
             {a:1,b:5,c:9},{a:5,b:11,c:4},{a:11,b:10,c:2},{a:10,b:7,c:6},{a:7,b:1,c:8},
             {a:3,b:9,c:4},{a:3,b:4,c:2},{a:3,b:2,c:6},{a:3,b:6,c:8},{a:3,b:8,c:9},
             {a:4,b:9,c:5},{a:2,b:4,c:11},{a:6,b:2,c:10},{a:8,b:6,c:7},{a:9,b:8,c:1}
         ];
 
-        // Subdivide
-        const midpointCache = {};
-        function getMidpoint(i1, i2) {
-            const key = Math.min(i1,i2) + '_' + Math.max(i1,i2);
-            if (midpointCache[key] !== undefined) return midpointCache[key];
-            const v1 = vertices[i1], v2 = vertices[i2];
-            const mx = (v1.x+v2.x)/2, my = (v1.y+v2.y)/2, mz = (v1.z+v2.z)/2;
-            const len = Math.sqrt(mx*mx+my*my+mz*mz);
-            vertices.push({ x:mx/len, y:my/len, z:mz/len });
-            const idx = vertices.length - 1;
-            midpointCache[key] = idx;
-            return idx;
+        const vertices = [];
+        const vmap = new Map();   // dedupe shared edge/corner vertices
+        function addVert(x, y, z) {
+            const len = Math.sqrt(x*x + y*y + z*z);
+            x /= len; y /= len; z /= len;
+            const key = Math.round(x*1e6) + ',' + Math.round(y*1e6) + ',' + Math.round(z*1e6);
+            if (vmap.has(key)) return vmap.get(key);
+            vertices.push({ x, y, z });
+            vmap.set(key, vertices.length - 1);
+            return vertices.length - 1;
         }
 
-        for (let s = 0; s < subdivisions; s++) {
-            const newFaces = [];
-            for (const f of faces) {
-                const ab = getMidpoint(f.a, f.b);
-                const bc = getMidpoint(f.b, f.c);
-                const ca = getMidpoint(f.c, f.a);
-                newFaces.push(
-                    {a:f.a, b:ab, c:ca},
-                    {a:f.b, b:bc, c:ab},
-                    {a:f.c, b:ca, c:bc},
-                    {a:ab, b:bc, c:ca}
-                );
+        const faces = [];
+        for (const f of baseFaces) {
+            const A = base[f.a], B = base[f.b], C = base[f.c];
+            // Barycentric grid: idx[i][j] with i along A→B, j along A→C
+            const idx = [];
+            for (let i = 0; i <= freq; i++) {
+                idx.push([]);
+                for (let j = 0; j <= freq - i; j++) {
+                    const u = i / freq, v = j / freq;
+                    idx[i].push(addVert(
+                        A.x + (B.x - A.x) * u + (C.x - A.x) * v,
+                        A.y + (B.y - A.y) * u + (C.y - A.y) * v,
+                        A.z + (B.z - A.z) * u + (C.z - A.z) * v
+                    ));
+                }
             }
-            faces = newFaces;
-            // Clear cache for next subdivision level
-            for (const key in midpointCache) delete midpointCache[key];
+            for (let i = 0; i < freq; i++) {
+                for (let j = 0; j < freq - i; j++) {
+                    faces.push({ a: idx[i][j], b: idx[i + 1][j], c: idx[i][j + 1] });
+                    if (j < freq - i - 1) {
+                        faces.push({ a: idx[i + 1][j], b: idx[i + 1][j + 1], c: idx[i][j + 1] });
+                    }
+                }
+            }
         }
 
         return { vertices, faces };
@@ -5269,7 +5274,9 @@ const Physics = (() => {
     // -----------------------------------------------------------------------
     function generateIsodoseSurfaces(sourceElements, isotopeKey, geometryModel, centers, levels, options, onProgress) {
         const includeAir = options.includeAir !== undefined ? options.includeAir : true;
-        const subdivisions = options.subdivisions || 3;
+        // frequency = geodesic density (rays = 10·freq²+2); legacy subdivisions
+        // map to freq 2^n so old callers keep their ray counts
+        const frequency = options.frequency || Math.pow(2, options.subdivisions || 3);
         const minDist = options.minDist || 1;
         const maxDist = options.maxDist || 2000;
         const searchSteps = options.searchSteps || 12;
@@ -5277,7 +5284,7 @@ const Physics = (() => {
         const centerList = Array.isArray(centers) ? centers : [centers];
 
         // Generate icosphere for uniform ray directions + triangulation
-        const ico = createIcosphere(subdivisions);
+        const ico = createIcosphere(frequency);
         const directions = ico.vertices;  // unit vectors
         const icoFaces = ico.faces;       // triangulation
 
@@ -5401,33 +5408,46 @@ const Physics = (() => {
     // -----------------------------------------------------------------------
     async function generateIsodoseSurfacesAsync(sourceElements, isotopeKey, geometryModel, centers, levels, options, onProgress) {
         const includeAir = options.includeAir !== undefined ? options.includeAir : true;
-        const subdivisions = options.subdivisions || 3;
+        const frequency = options.frequency || Math.pow(2, options.subdivisions || 3);
         const minDist = options.minDist || 1;
         const maxDist = options.maxDist || 2000;
         const searchSteps = options.searchSteps || 12;
         const calcOpts = { includeAir: includeAir };
         const centerList = Array.isArray(centers) ? centers : [centers];
 
-        const ico = createIcosphere(subdivisions);
+        const ico = createIcosphere(frequency);
         const directions = ico.vertices;
         const icoFaces = ico.faces;
         const sortedLevels = levels.slice().sort((a, b) => b.value_mrem_hr - a.value_mrem_hr);
 
-        function doseAtPoint(dosePos) {
+        // Bounding-sphere acceleration for the ray-tracer: volumes a segment
+        // provably cannot touch are skipped. Purely a rejection test — the
+        // layers that come back are identical (regression-checked against the
+        // sync reference, which does not use it).
+        const rayAccel = geometryModel.buildRayAccel ? geometryModel.buildRayAccel() : null;
+
+        // Every decision this algorithm makes is "is dose above/below a level?"
+        // — never the value itself. Dose is a sum of nonnegative element
+        // kernels, so once the running sum passes `breakAbove` the comparison
+        // outcome is locked and the remaining elements can be skipped. Same
+        // summation order, so every decision (and thus every vertex) is
+        // bit-identical to the exhaustive sum.
+        function doseAtPoint(dosePos, breakAbove) {
             let total = 0;
             for (const elem of sourceElements) {
-                const layers = geometryModel.rayTrace(elem.position, dosePos);
+                const layers = geometryModel.rayTrace(elem.position, dosePos, rayAccel);
                 total += pointSourceDose(elem.activity_Ci, elem.isotopeKey || isotopeKey,
                     elem.position, dosePos, layers, calcOpts).total_mrem_hr;
+                if (breakAbove !== undefined && total > breakAbove) return total;
             }
             return total;
         }
-        function doseAtDistance(center, dir, dist) {
+        function doseAtDistance(center, dir, dist, breakAbove) {
             return doseAtPoint({
                 x: center.x + dir.x * dist,
                 y: center.y + dir.y * dist,
                 z: center.z + dir.z * dist
-            });
+            }, breakAbove);
         }
 
         // Cooperative yield: give the browser a paint/input window every ~40 ms
@@ -5446,6 +5466,11 @@ const Physics = (() => {
         const totalWork = directions.length * centerList.length;
         let workDone = 0;
 
+        // March samples are compared against EVERY level, so their early-exit
+        // ceiling must be the highest level: a partial sum that exceeds it
+        // answers "above" for all levels; anything else is summed exactly.
+        const levelMax = sortedLevels.length ? sortedLevels[0].value_mrem_hr : undefined;
+
         for (let ci = 0; ci < centerList.length; ci++) {
             const center = centerList[ci];
             for (let di = 0; di < directions.length; di++) {
@@ -5453,7 +5478,7 @@ const Physics = (() => {
 
                 // Dose at the innermost sample decides which levels are live
                 // on this ray at all (mirrors the sync version's early-out).
-                const s0 = doseAtDistance(center, dir, minDist);
+                const s0 = doseAtDistance(center, dir, minDist, levelMax);
                 let smallestLive = null;
                 for (const lev of sortedLevels) {
                     if (s0 >= lev.value_mrem_hr) smallestLive = lev.value_mrem_hr;
@@ -5468,10 +5493,10 @@ const Physics = (() => {
                     for (let d = minDist * 1.5; ; d *= 1.5) {
                         if (d >= maxDist) {
                             reachedMax = true;
-                            maxSample = doseAtDistance(center, dir, maxDist);
+                            maxSample = doseAtDistance(center, dir, maxDist, levelMax);
                             break;
                         }
-                        const s = doseAtDistance(center, dir, d);
+                        const s = doseAtDistance(center, dir, d, levelMax);
                         samples.push({ d: d, dose: s });
                         if (s < smallestLive) break;   // every live level has bracketed
                     }
@@ -5508,7 +5533,8 @@ const Physics = (() => {
 
                     for (let step = 0; step < searchSteps; step++) {
                         const mid = (lo + hi) / 2;
-                        if (doseAtDistance(center, dir, mid) > L) lo = mid;
+                        // Bisection only compares against THIS level
+                        if (doseAtDistance(center, dir, mid, L) > L) lo = mid;
                         else hi = mid;
                     }
                     const dist = (lo + hi) / 2;
@@ -6186,10 +6212,49 @@ const Geometry = (() => {
         }
 
         // ---------------------------------------------------------------
-        // Ray-trace from source point to dose point
-        // Returns [{materialKey, thickness_cm}] ordered along the ray
+        // Bounding-sphere acceleration for rayTrace. One entry per enabled
+        // volume: a conservative world-space sphere the volume is fully
+        // inside. A segment that misses the sphere can neither intersect
+        // the volume nor have any point inside it, so both the intersect
+        // loop and the material sampling may skip it — the layers returned
+        // are identical, just computed faster. Build once per batch of
+        // traces (the caller owns freshness: rebuild after geometry edits).
         // ---------------------------------------------------------------
-        rayTrace(fromPos, toPos) {
+        buildRayAccel() {
+            const accel = [];
+            for (const vol of this.volumes) {
+                if (vol.enabled === false) continue;
+                const dims = vol._dims();
+                const type = vol._type();
+                let cy, r2;
+                if (type === 'sphere') {
+                    cy = dims.radius;
+                    r2 = dims.radius * dims.radius;
+                } else if (type === 'box') {
+                    cy = dims.height / 2;
+                    r2 = (dims.width * dims.width + dims.height * dims.height +
+                          dims.depth * dims.depth) / 4;
+                } else {
+                    // cylinder / disk / annulus: radius × half-height envelope
+                    const r = dims.radius || dims.outerRadius || 0;
+                    const h = dims.height || dims.thickness || 0;
+                    cy = h / 2;
+                    r2 = r * r + (h / 2) * (h / 2);
+                }
+                const c = vol.localToWorld(0, cy, 0);
+                // small conservative margin against float error
+                accel.push({ vol: vol, cx: c.x, cy: c.y, cz: c.z, r2: r2 * 1.000002 + 1e-9 });
+            }
+            return accel;
+        }
+
+        // ---------------------------------------------------------------
+        // Ray-trace from source point to dose point
+        // Returns [{materialKey, thickness_cm}] ordered along the ray.
+        // Optional accel (from buildRayAccel) skips volumes the segment
+        // provably cannot touch — result is unchanged.
+        // ---------------------------------------------------------------
+        rayTrace(fromPos, toPos, accel) {
             const dx = toPos.x - fromPos.x;
             const dy = toPos.y - fromPos.y;
             const dz = toPos.z - fromPos.z;
@@ -6200,12 +6265,27 @@ const Geometry = (() => {
             const ny = dy / rayLen;
             const nz = dz / rayLen;
 
-            // Collect all intersection t-values from every volume
+            // Candidate volumes: those whose bounding sphere the segment touches
+            let candidates = null;
+            if (accel) {
+                candidates = [];
+                for (const a of accel) {
+                    // squared distance from sphere center to segment [from,to]
+                    const px = a.cx - fromPos.x, py = a.cy - fromPos.y, pz = a.cz - fromPos.z;
+                    let t = (px * dx + py * dy + pz * dz) / (rayLen * rayLen);
+                    if (t < 0) t = 0; else if (t > 1) t = 1;
+                    const ex = px - t * dx, ey = py - t * dy, ez = pz - t * dz;
+                    if (ex * ex + ey * ey + ez * ez <= a.r2) candidates.push(a.vol);
+                }
+            }
+            const vols = candidates || this.volumes;
+
+            // Collect all intersection t-values from every candidate volume
             const allT = new Set();
             allT.add(0);
             allT.add(rayLen);
 
-            for (const vol of this.volumes) {
+            for (const vol of vols) {
                 if (vol.enabled === false) continue;
                 const hits = vol.rayIntersect(fromPos.x, fromPos.y, fromPos.z, nx, ny, nz);
                 for (const t of hits) {
@@ -6218,7 +6298,9 @@ const Geometry = (() => {
             // Sort intersection parameters
             const boundaries = Array.from(allT).sort((a, b) => a - b);
 
-            // Walk segments, sample midpoint to determine material
+            // Walk segments, sample midpoint to determine material. Only the
+            // candidate volumes can contain a point ON the segment, so the
+            // material lookup may use the same reduced list.
             const layers = [];
             for (let i = 0; i < boundaries.length - 1; i++) {
                 const t0 = boundaries[i];
@@ -6231,7 +6313,19 @@ const Geometry = (() => {
                 const py = fromPos.y + tMid * ny;
                 const pz = fromPos.z + tMid * nz;
 
-                const mat = this.getMaterialAt(px, py, pz);
+                let mat;
+                if (candidates) {
+                    mat = 'air';
+                    let bestPriority = -1;
+                    for (const vol of candidates) {
+                        if (vol.priority > bestPriority && vol.containsPoint(px, py, pz)) {
+                            mat = vol.materialKey;
+                            bestPriority = vol.priority;
+                        }
+                    }
+                } else {
+                    mat = this.getMaterialAt(px, py, pz);
+                }
 
                 if (layers.length > 0 && layers[layers.length - 1].materialKey === mat) {
                     layers[layers.length - 1].thickness_cm += thickness;
@@ -10102,8 +10196,8 @@ const Editor = (() => {
                         return;
                     }
 
-                    // Resolution = icosphere subdivision level
-                    const subdivisions = parseInt(document.getElementById('isodoseRes').value) || 3;
+                    // Resolution = geodesic frequency (rays = 10·freq²+2)
+                    const frequency = parseInt(document.getElementById('isodoseRes').value) || 6;
                     const maxRange = parseFloat(document.getElementById('isodoseRange').value) * IN;
 
                     // Build levels
@@ -10124,7 +10218,7 @@ const Editor = (() => {
                         elements, isotopeKey, model, centers, levels,
                         {
                             includeAir: includeAir,
-                            subdivisions: subdivisions,
+                            frequency: frequency,
                             minDist: 1,
                             maxDist: maxRange,
                             searchSteps: 12
@@ -10511,7 +10605,7 @@ const Editor = (() => {
             }
             const model = Editor.getModel();
             const IN = Geometry.INCH_TO_CM;
-            const subdiv = parseInt(document.getElementById('isodoseRes').value) || 2;
+            const frequency = parseInt(document.getElementById('isodoseRes').value) || 6;
             const maxRange = parseFloat(document.getElementById('isodoseRange').value) * IN;
             const includeAir = document.getElementById('includeAir').checked;
             const levels = isodoseLevelData.map(l => ({
@@ -10553,7 +10647,7 @@ const Editor = (() => {
                     if (centers.length) {
                         surfaces = await Physics.generateIsodoseSurfacesAsync(
                             elements, model.getSourceIsotope(), model, centers, levels,
-                            { includeAir: includeAir, subdivisions: subdiv, minDist: 1, maxDist: maxRange, searchSteps: 12 });
+                            { includeAir: includeAir, frequency: frequency, minDist: 1, maxDist: maxRange, searchSteps: 12 });
                     }
                     frames.push({ stepIdx: stepIdx, tMin: simResults.times_min[stepIdx], surfaces: surfaces, centers: centers, act: act });
                 } catch (e) {
