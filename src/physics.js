@@ -22,7 +22,8 @@ const Physics = (() => {
     // -----------------------------------------------------------------------
     // Calculate dose rate at a point from a single point source element
     //
-    // Returns dose rate in mrem/hr (= mrad/hr for gamma, QF=1)
+    // Returns dose rate in mrem/hr: absorbed dose to soft tissue (ICRU-44),
+    // QF=1 for photons so mrad(tissue)/hr = mrem/hr.
     //
     // Parameters:
     //   activity_Ci:  source element activity (Ci)
@@ -90,11 +91,15 @@ const Physics = (() => {
             // Attenuated fluence rate with buildup
             const phi = phi_unc * B * Math.exp(-totalMFP);
 
-            // Mass energy-absorption coefficient for air (for dose calculation)
-            const mu_en_rho_air = Materials.getMuEnRho('air', E);
+            // Fluence -> absorbed dose in SOFT TISSUE (ICRU-44). Photons have
+            // QF=1, so mrad(tissue) = mrem. Using air here instead (as pre-v0.9
+            // builds did) yields air kerma, which underestimates tissue dose by
+            // ~10% at Co-60 energies and reads ~14% below an exposure (mR/hr)
+            // instrument or MicroShield's exposure column.
+            const mu_en_rho_tissue = Materials.getTissueMuEnRho(E);
 
             // Dose rate contribution from this energy line
-            const dose_mrem = phi * E * mu_en_rho_air * DOSE_CONV;
+            const dose_mrem = phi * E * mu_en_rho_tissue * DOSE_CONV;
 
             total_mrem += dose_mrem;
             byEnergy.push({ energy_MeV: E, dose_mrem_hr: dose_mrem });

@@ -17,6 +17,8 @@ const Scene = (() => {
     let selectedId = null;
     let volGroupById = {};           // volumeId -> THREE.Group
     let pickMeshes = [];             // raycast targets (userData.volumeId set)
+    let volLabels = [];              // [{group, text, color}] name labels,
+                                     // laid out in world space after build
     const GROUND_PLANE = { normal: { x: 0, y: 1, z: 0 }, constant: 0 };
 
     // --- Feature snapping (Measure / Smart Dimension) ---
@@ -136,11 +138,12 @@ const Scene = (() => {
             sceneGroup.traverse(child => {
                 if (child.geometry) child.geometry.dispose();
                 if (child.material) {
-                    if (Array.isArray(child.material)) {
-                        child.material.forEach(m => m.dispose());
-                    } else {
-                        child.material.dispose();
-                    }
+                    const mats = Array.isArray(child.material)
+                        ? child.material : [child.material];
+                    mats.forEach(m => {
+                        if (m.map) m.map.dispose();
+                        m.dispose();
+                    });
                 }
             });
         }
@@ -148,12 +151,14 @@ const Scene = (() => {
         sceneGroup = new THREE.Group();
         volGroupById = {};
         pickMeshes = [];
+        volLabels = [];
 
         for (const vol of volumesVisData) {
             renderVolume(sceneGroup, vol);
         }
 
         scene.add(sceneGroup);
+        layoutVolumeLabels();
 
         // Feature-snapping data for Measure / Smart Dimension
         currentVisList = volumesVisData || [];
@@ -326,21 +331,14 @@ const Scene = (() => {
             volGroup.add(wireframe);
         }
 
-        // Label
+        // Label: queued and laid out in world space once every volume
+        // exists, so nested layers stack instead of overlapping.
         if (vol.label) {
-            const h = vol.height || vol.thickness ||
-                (vol.type === 'sphere' ? vol.radius * 2 : 0);
-            const r = vol.type === 'box'
-                ? Math.max(vol.width, vol.depth) / 2
-                : (vol.outerRadius || vol.radius || 10);
-            const labelSprite = makeTextSprite(
-                vol.label + (ghost ? ' (excluded)' : ''), {
-                fontSize: 14,
-                color: ghost ? '#666c76' : (isSource ? '#FF8F00' : '#ffffff'),
-                worldHeight: 9
+            volLabels.push({
+                group: volGroup,
+                text: vol.label + (ghost ? ' (excluded)' : ''),
+                color: ghost ? '#666c76' : (isSource ? '#FF8F00' : '#ffffff')
             });
-            labelSprite.position.set(r + 12, h / 2, 0);
-            volGroup.add(labelSprite);
         }
 
         // Register solid meshes as raycast pick targets
@@ -350,6 +348,102 @@ const Scene = (() => {
                 pickMeshes.push(child);
             }
         });
+    }
+
+    // -----------------------------------------------------------------------
+    // Volume name labels — world-space layout with overlap avoidance
+    //
+    // Each label anchors to the +X side of its volume's WORLD bounding box
+    // at mid-height, with a leader line back to that surface point. Labels
+    // whose anchors crowd the same spot (concentric tank layers, stacked
+    // plates) climb to the next free row instead of drawing on top of each
+    // other. Sprites are parented to the volume group so they track live
+    // gizmo drags; commitGizmoTransform re-runs the layout on release.
+    // -----------------------------------------------------------------------
+    let lastLabelLayout = [];   // world-space placements of the last layout
+
+    function layoutVolumeLabels() {
+        if (!sceneGroup) return;
+        lastLabelLayout = [];
+
+        // Strip previous label sprites/leaders first so they neither leak
+        // nor inflate the bounding boxes measured below.
+        for (const lb of volLabels) {
+            for (const child of lb.group.children.slice()) {
+                if (!child.userData.isVolLabel) continue;
+                lb.group.remove(child);
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (child.material.map) child.material.map.dispose();
+                    child.material.dispose();
+                }
+            }
+        }
+        if (!volLabels.length) return;
+
+        sceneGroup.updateMatrixWorld(true);
+        const box = new THREE.Box3();
+        const items = [];
+        for (const lb of volLabels) {
+            box.setFromObject(lb.group);
+            if (box.isEmpty()) continue;   // hidden volume: empty group
+            items.push({
+                lb,
+                anchor: new THREE.Vector3(
+                    box.max.x,
+                    (box.min.y + box.max.y) / 2,
+                    (box.min.z + box.max.z) / 2)
+            });
+        }
+        // Deterministic stacking: lower anchors claim rows first; among
+        // near-equals the outermost (largest +X) layer keeps the base row
+        // so nested layers read outside-in going up.
+        items.sort((a, b) => (a.anchor.y - b.anchor.y) || (b.anchor.x - a.anchor.x));
+
+        const ROW = 11;   // vertical slot: label worldHeight 9 + breathing room
+        const GAP = 10;   // surface -> label left edge
+        const placed = [];
+        for (const it of items) {
+            const sprite = makeTextSprite(it.lb.text, {
+                fontSize: 14, color: it.lb.color, worldHeight: 9
+            });
+            sprite.center.set(0, 0.5);   // position = left-middle edge
+            const w = sprite.scale.x;
+            const pos = it.anchor.clone();
+            pos.x += GAP;
+            // Climb rows until clear of every nearby placed label
+            let guard = 0;
+            while (guard++ < 64 && placed.some(q =>
+                Math.abs(pos.y - q.y) < ROW &&
+                Math.abs(pos.z - q.z) < 30 &&
+                pos.x < q.x + q.w + 4 && q.x < pos.x + w + 4)) {
+                pos.y += ROW;
+            }
+            placed.push({ x: pos.x, y: pos.y, z: pos.z, w });
+            lastLabelLayout.push({
+                text: it.lb.text, w,
+                x: pos.x, y: pos.y, z: pos.z,
+                anchor: { x: it.anchor.x, y: it.anchor.y, z: it.anchor.z }
+            });
+
+            // Leader line tying the label to the layer it names
+            const leadGeom = new THREE.BufferGeometry().setFromPoints([
+                it.lb.group.worldToLocal(it.anchor.clone()),
+                it.lb.group.worldToLocal(pos.clone())
+            ]);
+            const lead = new THREE.Line(leadGeom, new THREE.LineBasicMaterial({
+                color: it.lb.color, transparent: true, opacity: 0.45,
+                depthTest: false
+            }));
+            lead.userData.isVolLabel = true;
+            lead.renderOrder = 20;
+            it.lb.group.add(lead);
+
+            sprite.position.copy(it.lb.group.worldToLocal(pos.clone()));
+            sprite.userData.isVolLabel = true;
+            sprite.renderOrder = 21;
+            it.lb.group.add(sprite);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -1530,6 +1624,9 @@ const Scene = (() => {
                 { x: obj.rotation.x * RAD, y: obj.rotation.y * RAD, z: obj.rotation.z * RAD }
             );
         }
+        // Re-anchor name labels: a rotated/moved volume changes its world
+        // bounding box, and neighbours may need to stack differently now.
+        layoutVolumeLabels();
     }
 
     // --- Selection ---
@@ -1607,6 +1704,7 @@ const Scene = (() => {
         cancelMeasure,
         deleteLastMeasure,
         getSnap: () => currentSnap,
+        getLabelLayout: () => lastLabelLayout,
         getCameraState: () => ({
             pos: camera ? camera.position.toArray() : null,
             target: controls ? controls.target.toArray() : null,

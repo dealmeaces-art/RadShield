@@ -2479,7 +2479,7 @@
  .noprint{margin:14px 0;} @media print{.noprint{display:none;}}
 </style></head><body>
 <h1>RadShield Dose Assessment Report</h1>
-<div class="meta">Generated ${new Date().toLocaleString()} &nbsp;•&nbsp; RadShield v0.5 &nbsp;•&nbsp;
+<div class="meta">Generated ${new Date().toLocaleString()} &nbsp;•&nbsp; RadShield v0.10 &nbsp;•&nbsp;
  point-kernel method with ANSI/ANS-6.4.3-1991 buildup factors &nbsp;•&nbsp;
  air attenuation ${calcOpts.includeAir ? 'included' : 'excluded'}</div>
 <div class="noprint"><button onclick="window.print()" style="padding:8px 18px;font-size:14px;cursor:pointer;">Print / Save as PDF</button></div>
@@ -2494,7 +2494,8 @@
 <div class="foot">Method: each source volume is meshed into point elements; each element is ray-traced through the
 3D geometry to the dose point; attenuation uses NIST XCOM coefficients and scattered radiation uses
 geometric-progression buildup factors per ANSI/ANS-6.4.3-1991 (exposure set, outermost-material method).
-Results are exposure-based (QF = 1). See the RadShield Design Document for approximations and limitations.</div>
+Reported dose rates are absorbed dose to soft tissue, ICRU-44 (QF = 1; mR/hr exposure &asymp; mrem/hr &divide; 0.974).
+See the RadShield Design Document for approximations and limitations.</div>
 </body></html>`;
 
             const w = window.open('', '_blank');

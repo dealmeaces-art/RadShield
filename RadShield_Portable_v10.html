@@ -4723,6 +4723,27 @@ const Materials = (() => {
     };
 
     // -----------------------------------------------------------------------
+    // Soft Tissue (ICRU-44) mass energy-absorption coefficients (cm²/g)
+    // NIST X-Ray Mass Attenuation Coefficients, "Soft Tissue (ICRU-44)";
+    // table energies match ENERGY_GRID exactly (direct transcription).
+    //
+    // Dose-response medium ONLY: converts photon fluence to absorbed dose
+    // in tissue, so the reported mrem/hr is tissue dose (QF=1 for photons),
+    // not air kerma. Deliberately NOT in MATERIAL_DATA — tissue is not
+    // selectable as a shield material and has no GP buildup set.
+    // -----------------------------------------------------------------------
+    const TISSUE_MU_EN_RHO = [
+        4.987, 1.402, 0.5663, 0.1616, 0.07216, 0.04360, 0.03264, 0.02617,
+        0.02545, 0.02745, 0.02942, 0.03164, 0.03249, 0.03269, 0.03254, 0.03176,
+        0.03074, 0.02938, 0.02807, 0.02583, 0.02259, 0.02045, 0.01895, 0.01786,
+        0.01639, 0.01547
+    ];
+
+    function getTissueMuEnRho(energy_MeV) {
+        return logLogInterp(ENERGY_GRID, TISSUE_MU_EN_RHO, energy_MeV);
+    }
+
+    // -----------------------------------------------------------------------
     // Interpolation helper: log-log interpolation for attenuation coefficients
     // -----------------------------------------------------------------------
     function logLogInterp(energyGrid, values, energy) {
@@ -4853,6 +4874,7 @@ const Materials = (() => {
         getMuRho,
         getMu,
         getMuEnRho,
+        getTissueMuEnRho,
         getBuildup,
         getMaterial,
         getMaterialList,
@@ -5008,7 +5030,8 @@ const Physics = (() => {
     // -----------------------------------------------------------------------
     // Calculate dose rate at a point from a single point source element
     //
-    // Returns dose rate in mrem/hr (= mrad/hr for gamma, QF=1)
+    // Returns dose rate in mrem/hr: absorbed dose to soft tissue (ICRU-44),
+    // QF=1 for photons so mrad(tissue)/hr = mrem/hr.
     //
     // Parameters:
     //   activity_Ci:  source element activity (Ci)
@@ -5076,11 +5099,15 @@ const Physics = (() => {
             // Attenuated fluence rate with buildup
             const phi = phi_unc * B * Math.exp(-totalMFP);
 
-            // Mass energy-absorption coefficient for air (for dose calculation)
-            const mu_en_rho_air = Materials.getMuEnRho('air', E);
+            // Fluence -> absorbed dose in SOFT TISSUE (ICRU-44). Photons have
+            // QF=1, so mrad(tissue) = mrem. Using air here instead (as pre-v0.9
+            // builds did) yields air kerma, which underestimates tissue dose by
+            // ~10% at Co-60 energies and reads ~14% below an exposure (mR/hr)
+            // instrument or MicroShield's exposure column.
+            const mu_en_rho_tissue = Materials.getTissueMuEnRho(E);
 
             // Dose rate contribution from this energy line
-            const dose_mrem = phi * E * mu_en_rho_air * DOSE_CONV;
+            const dose_mrem = phi * E * mu_en_rho_tissue * DOSE_CONV;
 
             total_mrem += dose_mrem;
             byEnergy.push({ energy_MeV: E, dose_mrem_hr: dose_mrem });
@@ -6890,6 +6917,8 @@ const Scene = (() => {
     let selectedId = null;
     let volGroupById = {};           // volumeId -> THREE.Group
     let pickMeshes = [];             // raycast targets (userData.volumeId set)
+    let volLabels = [];              // [{group, text, color}] name labels,
+                                     // laid out in world space after build
     const GROUND_PLANE = { normal: { x: 0, y: 1, z: 0 }, constant: 0 };
 
     // --- Feature snapping (Measure / Smart Dimension) ---
@@ -7009,11 +7038,12 @@ const Scene = (() => {
             sceneGroup.traverse(child => {
                 if (child.geometry) child.geometry.dispose();
                 if (child.material) {
-                    if (Array.isArray(child.material)) {
-                        child.material.forEach(m => m.dispose());
-                    } else {
-                        child.material.dispose();
-                    }
+                    const mats = Array.isArray(child.material)
+                        ? child.material : [child.material];
+                    mats.forEach(m => {
+                        if (m.map) m.map.dispose();
+                        m.dispose();
+                    });
                 }
             });
         }
@@ -7021,12 +7051,14 @@ const Scene = (() => {
         sceneGroup = new THREE.Group();
         volGroupById = {};
         pickMeshes = [];
+        volLabels = [];
 
         for (const vol of volumesVisData) {
             renderVolume(sceneGroup, vol);
         }
 
         scene.add(sceneGroup);
+        layoutVolumeLabels();
 
         // Feature-snapping data for Measure / Smart Dimension
         currentVisList = volumesVisData || [];
@@ -7199,21 +7231,14 @@ const Scene = (() => {
             volGroup.add(wireframe);
         }
 
-        // Label
+        // Label: queued and laid out in world space once every volume
+        // exists, so nested layers stack instead of overlapping.
         if (vol.label) {
-            const h = vol.height || vol.thickness ||
-                (vol.type === 'sphere' ? vol.radius * 2 : 0);
-            const r = vol.type === 'box'
-                ? Math.max(vol.width, vol.depth) / 2
-                : (vol.outerRadius || vol.radius || 10);
-            const labelSprite = makeTextSprite(
-                vol.label + (ghost ? ' (excluded)' : ''), {
-                fontSize: 14,
-                color: ghost ? '#666c76' : (isSource ? '#FF8F00' : '#ffffff'),
-                worldHeight: 9
+            volLabels.push({
+                group: volGroup,
+                text: vol.label + (ghost ? ' (excluded)' : ''),
+                color: ghost ? '#666c76' : (isSource ? '#FF8F00' : '#ffffff')
             });
-            labelSprite.position.set(r + 12, h / 2, 0);
-            volGroup.add(labelSprite);
         }
 
         // Register solid meshes as raycast pick targets
@@ -7223,6 +7248,102 @@ const Scene = (() => {
                 pickMeshes.push(child);
             }
         });
+    }
+
+    // -----------------------------------------------------------------------
+    // Volume name labels — world-space layout with overlap avoidance
+    //
+    // Each label anchors to the +X side of its volume's WORLD bounding box
+    // at mid-height, with a leader line back to that surface point. Labels
+    // whose anchors crowd the same spot (concentric tank layers, stacked
+    // plates) climb to the next free row instead of drawing on top of each
+    // other. Sprites are parented to the volume group so they track live
+    // gizmo drags; commitGizmoTransform re-runs the layout on release.
+    // -----------------------------------------------------------------------
+    let lastLabelLayout = [];   // world-space placements of the last layout
+
+    function layoutVolumeLabels() {
+        if (!sceneGroup) return;
+        lastLabelLayout = [];
+
+        // Strip previous label sprites/leaders first so they neither leak
+        // nor inflate the bounding boxes measured below.
+        for (const lb of volLabels) {
+            for (const child of lb.group.children.slice()) {
+                if (!child.userData.isVolLabel) continue;
+                lb.group.remove(child);
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (child.material.map) child.material.map.dispose();
+                    child.material.dispose();
+                }
+            }
+        }
+        if (!volLabels.length) return;
+
+        sceneGroup.updateMatrixWorld(true);
+        const box = new THREE.Box3();
+        const items = [];
+        for (const lb of volLabels) {
+            box.setFromObject(lb.group);
+            if (box.isEmpty()) continue;   // hidden volume: empty group
+            items.push({
+                lb,
+                anchor: new THREE.Vector3(
+                    box.max.x,
+                    (box.min.y + box.max.y) / 2,
+                    (box.min.z + box.max.z) / 2)
+            });
+        }
+        // Deterministic stacking: lower anchors claim rows first; among
+        // near-equals the outermost (largest +X) layer keeps the base row
+        // so nested layers read outside-in going up.
+        items.sort((a, b) => (a.anchor.y - b.anchor.y) || (b.anchor.x - a.anchor.x));
+
+        const ROW = 11;   // vertical slot: label worldHeight 9 + breathing room
+        const GAP = 10;   // surface -> label left edge
+        const placed = [];
+        for (const it of items) {
+            const sprite = makeTextSprite(it.lb.text, {
+                fontSize: 14, color: it.lb.color, worldHeight: 9
+            });
+            sprite.center.set(0, 0.5);   // position = left-middle edge
+            const w = sprite.scale.x;
+            const pos = it.anchor.clone();
+            pos.x += GAP;
+            // Climb rows until clear of every nearby placed label
+            let guard = 0;
+            while (guard++ < 64 && placed.some(q =>
+                Math.abs(pos.y - q.y) < ROW &&
+                Math.abs(pos.z - q.z) < 30 &&
+                pos.x < q.x + q.w + 4 && q.x < pos.x + w + 4)) {
+                pos.y += ROW;
+            }
+            placed.push({ x: pos.x, y: pos.y, z: pos.z, w });
+            lastLabelLayout.push({
+                text: it.lb.text, w,
+                x: pos.x, y: pos.y, z: pos.z,
+                anchor: { x: it.anchor.x, y: it.anchor.y, z: it.anchor.z }
+            });
+
+            // Leader line tying the label to the layer it names
+            const leadGeom = new THREE.BufferGeometry().setFromPoints([
+                it.lb.group.worldToLocal(it.anchor.clone()),
+                it.lb.group.worldToLocal(pos.clone())
+            ]);
+            const lead = new THREE.Line(leadGeom, new THREE.LineBasicMaterial({
+                color: it.lb.color, transparent: true, opacity: 0.45,
+                depthTest: false
+            }));
+            lead.userData.isVolLabel = true;
+            lead.renderOrder = 20;
+            it.lb.group.add(lead);
+
+            sprite.position.copy(it.lb.group.worldToLocal(pos.clone()));
+            sprite.userData.isVolLabel = true;
+            sprite.renderOrder = 21;
+            it.lb.group.add(sprite);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -8403,6 +8524,9 @@ const Scene = (() => {
                 { x: obj.rotation.x * RAD, y: obj.rotation.y * RAD, z: obj.rotation.z * RAD }
             );
         }
+        // Re-anchor name labels: a rotated/moved volume changes its world
+        // bounding box, and neighbours may need to stack differently now.
+        layoutVolumeLabels();
     }
 
     // --- Selection ---
@@ -8480,6 +8604,7 @@ const Scene = (() => {
         cancelMeasure,
         deleteLastMeasure,
         getSnap: () => currentSnap,
+        getLabelLayout: () => lastLabelLayout,
         getCameraState: () => ({
             pos: camera ? camera.position.toArray() : null,
             target: controls ? controls.target.toArray() : null,
@@ -11087,7 +11212,7 @@ const Editor = (() => {
  .noprint{margin:14px 0;} @media print{.noprint{display:none;}}
 </style></head><body>
 <h1>RadShield Dose Assessment Report</h1>
-<div class="meta">Generated ${new Date().toLocaleString()} &nbsp;•&nbsp; RadShield v0.5 &nbsp;•&nbsp;
+<div class="meta">Generated ${new Date().toLocaleString()} &nbsp;•&nbsp; RadShield v0.10 &nbsp;•&nbsp;
  point-kernel method with ANSI/ANS-6.4.3-1991 buildup factors &nbsp;•&nbsp;
  air attenuation ${calcOpts.includeAir ? 'included' : 'excluded'}</div>
 <div class="noprint"><button onclick="window.print()" style="padding:8px 18px;font-size:14px;cursor:pointer;">Print / Save as PDF</button></div>
@@ -11102,7 +11227,8 @@ const Editor = (() => {
 <div class="foot">Method: each source volume is meshed into point elements; each element is ray-traced through the
 3D geometry to the dose point; attenuation uses NIST XCOM coefficients and scattered radiation uses
 geometric-progression buildup factors per ANSI/ANS-6.4.3-1991 (exposure set, outermost-material method).
-Results are exposure-based (QF = 1). See the RadShield Design Document for approximations and limitations.</div>
+Reported dose rates are absorbed dose to soft tissue, ICRU-44 (QF = 1; mR/hr exposure &asymp; mrem/hr &divide; 0.974).
+See the RadShield Design Document for approximations and limitations.</div>
 </body></html>`;
 
             const w = window.open('', '_blank');

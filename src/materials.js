@@ -310,6 +310,27 @@ const Materials = (() => {
     };
 
     // -----------------------------------------------------------------------
+    // Soft Tissue (ICRU-44) mass energy-absorption coefficients (cm²/g)
+    // NIST X-Ray Mass Attenuation Coefficients, "Soft Tissue (ICRU-44)";
+    // table energies match ENERGY_GRID exactly (direct transcription).
+    //
+    // Dose-response medium ONLY: converts photon fluence to absorbed dose
+    // in tissue, so the reported mrem/hr is tissue dose (QF=1 for photons),
+    // not air kerma. Deliberately NOT in MATERIAL_DATA — tissue is not
+    // selectable as a shield material and has no GP buildup set.
+    // -----------------------------------------------------------------------
+    const TISSUE_MU_EN_RHO = [
+        4.987, 1.402, 0.5663, 0.1616, 0.07216, 0.04360, 0.03264, 0.02617,
+        0.02545, 0.02745, 0.02942, 0.03164, 0.03249, 0.03269, 0.03254, 0.03176,
+        0.03074, 0.02938, 0.02807, 0.02583, 0.02259, 0.02045, 0.01895, 0.01786,
+        0.01639, 0.01547
+    ];
+
+    function getTissueMuEnRho(energy_MeV) {
+        return logLogInterp(ENERGY_GRID, TISSUE_MU_EN_RHO, energy_MeV);
+    }
+
+    // -----------------------------------------------------------------------
     // Interpolation helper: log-log interpolation for attenuation coefficients
     // -----------------------------------------------------------------------
     function logLogInterp(energyGrid, values, energy) {
@@ -440,6 +461,7 @@ const Materials = (() => {
         getMuRho,
         getMu,
         getMuEnRho,
+        getTissueMuEnRho,
         getBuildup,
         getMaterial,
         getMaterialList,

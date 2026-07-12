@@ -12,7 +12,7 @@ RadShield implements the classical **point-kernel method with buildup factors** 
 2. For each element × each gamma line of the isotope, a **ray is traced** from the element to the dose point through the 3D scene, producing an ordered list of material layers and their thicknesses (`geometry.js → SceneModel.rayTrace`).
 3. The **uncollided photon fluence** at the dose point is computed from the inverse-square law and exponential attenuation through those layers (`physics.js → pointSourceDose`).
 4. Scattered radiation is accounted for by multiplying by an energy- and depth-dependent **buildup factor** (ANS-6.4.3 Geometric-Progression form, `materials.js → getBuildup`).
-5. Fluence is converted to **exposure/dose rate** using the mass energy-absorption coefficient of air, and summed over all gamma lines and all source elements.
+5. Fluence is converted to **tissue dose rate** using the mass energy-absorption coefficient of soft tissue (ICRU-44), and summed over all gamma lines and all source elements.
 
 It is a deterministic method: no Monte Carlo, no random numbers, fully repeatable.
 
@@ -106,10 +106,10 @@ x = Σᵢ μᵢ(E) · tᵢ                [dimensionless, "mfp"]
 φ = φ_unc · B(E, x) · e⁻ˣ
 ```
 
-**Step 6 — fluence → dose rate.** Using the mass energy-absorption coefficient of **air** (exposure-type response):
+**Step 6 — fluence → dose rate.** Using the mass energy-absorption coefficient of **soft tissue (ICRU-44)**, so the result is absorbed dose to tissue:
 
 ```
-Ḋ = φ · E · (μ_en/ρ)_air(E) · C
+Ḋ = φ · E · (μ_en/ρ)_tissue(E) · C
 ```
 
 with the conversion constant
@@ -119,7 +119,14 @@ C = 1.602×10⁻⁶ [erg/MeV] × 3600 [s/hr] × 1000 [mrad/rad] ÷ 100 [erg/(g·
   = 5.767×10⁻²   [mrad/hr per (photon/(cm²·s)) · MeV · (cm²/g)]
 ```
 
-With QF = 1 for photons, mrad/hr is reported as mrem/hr; mSv/hr = mrem/hr ÷ 100.
+With QF = 1 for photons, mrad(tissue)/hr is reported as mrem/hr; mSv/hr = mrem/hr ÷ 100.
+
+> **Comparing against exposure readings (mR/hr).** Instruments and MicroShield's
+> exposure column report exposure in air, not tissue dose. The two differ by a
+> near-constant factor at Co-60 energies: `mR/hr ≈ mrem/hr(tissue) / 0.974`
+> (exposure = air kerma ÷ 0.876 rad/R; tissue dose = air kerma × ~1.11).
+> Pre-v0.9 builds converted with air's μ_en/ρ instead — air kerma labelled
+> mrem — which read ~10% below tissue dose and ~14% below exposure.
 
 **Step 7 — summation.** The scene dose rate is the double sum over all source elements and all gamma lines (`volumetricSourceDose`), each element with its own ray-trace. **Each element carries the isotope of the source volume it was meshed from**, so mixed-isotope scenes (e.g., a Co-60 tank plus a Cs-137 bottle) transport every source with its own gamma lines. Guard: if `r < 0.01 cm` (dose point inside a source element) the result is reported as infinite.
 
@@ -180,7 +187,7 @@ If **no** significant non-air layer exists (bare source in air with air attenuat
 For each material, two 26-point tables over the energy grid 0.01–10 MeV:
 
 - `μ/ρ` — **total** mass attenuation coefficient (with coherent scattering), NIST **XCOM** database, verified against XCOM (March 2026 correction pass: earlier iron values were 15–35% low; water/air/lead `μ_en/ρ` above 0.5 MeV also corrected).
-- `μ_en/ρ` — mass **energy-absorption** coefficient (air's is what converts fluence → dose).
+- `μ_en/ρ` — mass **energy-absorption** coefficient; soft tissue's (ICRU-44, NIST) converts fluence → dose.
 
 Interpolation is **log-log** in energy; outside the grid the endpoint value is clamped (relevant only below 10 keV or above 10 MeV — no bundled isotope emits there).
 
@@ -257,7 +264,7 @@ Sets the chosen dimension to each value in the range, re-meshes the sources, and
 1. **Point-kernel + buildup, not transport.** No explicit scatter geometry: buildup factors assume an infinite homogeneous medium. Finite/lopsided shields, streaming paths, skyshine, corner effects, and maze scatter are *not* modeled. Near such features, results can err in either direction.
 2. **Outermost-material buildup** for layered shields (§5.3) — the dominant remaining approximation now that the GP data matches the standard. Worst case: thin high-Z outer layer over thick low-Z shield.
 3. **Coherent-scattering inconsistency (small).** ANS-6.4.3 buildup factors were computed neglecting coherent scattering, so the mfp argument should strictly use μ-without-coherent (standard's Table 1a). RadShield uses XCOM totals throughout: <1% effect above ~0.3 MeV, a few percent at very low energies.
-4. **Gamma only, QF = 1.** No beta, neutron, bremsstrahlung, or X-ray components; exposure-in-air response (mrad ≈ mrem for photons), not organ/effective dose per ICRP conversion.
+4. **Gamma only, QF = 1.** No beta, neutron, bremsstrahlung, or X-ray components; absorbed dose to soft tissue (mrad ≈ mrem for photons), not organ/effective dose per ICRP conversion.
 5. **Mesh discretization.** Very close to a source surface (within ~1 element size), finite meshing over/under-shoots; increase mesh density for near-contact dose points.
 6. **No decay** during a session — activities are what you type (a `decayActivity` helper exists in `isotopes.js` but is not wired to the UI).
 7. **Materials are the bundled five** at fixed density/composition; steel is pure-iron data.

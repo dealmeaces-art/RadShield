@@ -130,7 +130,7 @@
     <div class="doctitle">Methodology &amp; Validation — Design Document</div>
     <div class="subtitle">How RadShield calculates gamma dose rates, the national standards and reference
     data it is built on, and the testing that shows its numbers can be trusted.</div>
-    <div class="meta">Version 0.6 &nbsp;•&nbsp; July 2026 &nbsp;•&nbsp; Technical basis document &nbsp;•&nbsp;
+    <div class="meta">Version 0.10 &nbsp;•&nbsp; July 2026 &nbsp;•&nbsp; Technical basis document &nbsp;•&nbsp;
     Companion to the RadShield User Guide</div>
 </div>
 
@@ -339,8 +339,8 @@ all up. The subtlety — and where the standardized data earns its keep — is i
         the tabulated coefficients from ANSI/ANS-6.4.3-1991 — this is the single most important reason its
         results are more realistic than a bare attenuation calculation (<a class="xref" href="#appB">Appendix&nbsp;B</a>).</li>
     <li><b>Convert and sum.</b> The resulting radiation field is converted to a dose rate in mrem/hr using the
-        energy-absorption response of air, and the contributions of every source element and every gamma-ray
-        energy line of the isotope are added together (<a class="xref" href="#appC">Appendix&nbsp;C, Steps&nbsp;6–7</a>).</li>
+        energy-absorption response of soft tissue (ICRU-44), and the contributions of every source element and
+        every gamma-ray energy line of the isotope are added together (<a class="xref" href="#appC">Appendix&nbsp;C, Steps&nbsp;6–7</a>).</li>
 </ol>
 
 <figure id="fig2">
@@ -406,7 +406,7 @@ a hand-tuned or "from memory" value.</p>
     <a class="xref" href="#appD">Appendix&nbsp;D, §D.1</a>.</td></tr>
 <tr><td><b>Energy absorption (µ<sub>en</sub>/ρ)</b></td>
     <td><b>NIST</b> mass energy-absorption coefficient tables</td>
-    <td>Air's coefficient converts the photon field to an exposure/dose response
+    <td>Soft tissue's coefficient (ICRU-44) converts the photon field to absorbed dose in tissue
     (<a class="xref" href="#appC">Appendix&nbsp;C, Step&nbsp;6</a>).</td></tr>
 <tr><td><b>Isotope gamma lines</b></td>
     <td>Standard evaluated decay data</td>
@@ -562,7 +562,8 @@ complete engineering list is in <a class="xref" href="#appF">Appendix&nbsp;F</a>
         codes use. It is least accurate for a thin high-Z liner over a thick low-Z shield, where it tends to
         under-predict buildup.</li>
     <li><b>Gamma only.</b> Beta, neutron, bremsstrahlung, and characteristic X-ray contributions are not
-        modeled; the response is exposure-in-air (mrad ≈ mrem for photons), not an ICRP organ/effective dose.</li>
+        modeled; the response is absorbed dose to soft tissue, ICRU-44 (mrad ≈ mrem for photons), not an
+        ICRP organ/effective dose.</li>
     <li><b>Bundled materials and isotopes.</b> Five materials at fixed composition (steel is modeled as pure
         iron), and a fixed isotope library (Co-60, Cs-137, Ir-192, I-131, Na-24). See
         <a class="xref" href="#appD">Appendix&nbsp;D</a>.</li>
@@ -710,12 +711,15 @@ density. If <i>Include air attenuation</i> is off, air layers are skipped in thi
 applied with the coefficients of the outermost significant material.</p>
 <p><b>Step 5 — attenuated fluence with buildup</b></p>
 <div class="eq">φ = φ_unc · B(E,x) · e⁻ˣ</div>
-<p><b>Step 6 — fluence → dose rate</b>, using the mass energy-absorption coefficient of air:</p>
-<div class="eq">Ḋ = φ · E · (µ_en/ρ)_air(E) · C
+<p><b>Step 6 — fluence → dose rate</b>, using the mass energy-absorption coefficient of soft tissue
+(ICRU-44, NIST), so the result is absorbed dose to tissue:</p>
+<div class="eq">Ḋ = φ · E · (µ_en/ρ)_tissue(E) · C
 
 C = 1.602×10⁻⁶ [erg/MeV] × 3600 [s/hr] × 1000 [mrad/rad] ÷ 100 [erg/(g·rad)]
   = 5.767×10⁻²   [mrad/hr per (photon/(cm²·s))·MeV·(cm²/g)]</div>
-<p>With quality factor 1 for photons, mrad/hr is reported as mrem/hr; mSv/hr = mrem/hr ÷ 100.</p>
+<p>With quality factor 1 for photons, mrad(tissue)/hr is reported as mrem/hr; mSv/hr = mrem/hr ÷ 100.
+When comparing against an exposure-reading instrument or MicroShield's exposure column,
+mR/hr ≈ mrem/hr ÷ 0.974 (exposure = air kerma ÷ 0.876 rad/R; tissue dose ≈ air kerma × 1.11).</p>
 <p><b>Step 7 — summation.</b> The scene dose rate is the double sum over all source elements and all gamma
 lines, each element ray-traced independently and carrying the isotope of the source volume it came from — so
 mixed-isotope scenes transport every source with its own gamma lines. If <code>r &lt; 0.01 cm</code> (dose point
@@ -845,7 +849,7 @@ recomputed per step because its geometry changes). Outputs per dose point: the d
 </ol>
 
 <p style="margin-top:48px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:13.5px;">
-RadShield — Methodology &amp; Validation, v0.6, July 2026. This document is self-contained and prints cleanly —
+RadShield — Methodology &amp; Validation, v0.10, July 2026. This document is self-contained and prints cleanly —
 use your browser's Print → Save as PDF. Companion documents: <i>RadShield User Guide</i> (operation) and
 <code>docs/DESIGN.md</code> (engineering source notes). RadShield is an engineering estimation tool; it does not
 replace radiological survey or the professional judgment of a qualified health physicist.</p>
